@@ -62,7 +62,9 @@ class TextEncoder(nn.Module):
 
         # Tokenize the input text and create a tensor representation
         inputs = self.tokenizer(text_input, return_tensors="pt", padding=True, truncation=True)
+        inputs.to(next(self.parameters()).device)
         
+        #print(f"TextEncoder inputs after tokenization: {inputs['input_ids'].shape}")
         # Forward pass through the model to get hidden states
         with torch.no_grad():
             outputs = self.model(**inputs)
@@ -72,6 +74,7 @@ class TextEncoder(nn.Module):
 
         # Optional: Project to the shared embedding dimension
         text_embedding = self.embedding_projection(last_hidden_state[:, 0, :])  # Shape: (batch_size, embedding_dim)
+
 
         return text_embedding
 

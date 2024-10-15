@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+#This basically just implements a loss function
+#In pytorch, loss functions also inherit from nn.Module
 class ContrastiveLearning(nn.Module):
     """
     ContrastiveLearning class for implementing contrastive learning between ECG and text embeddings.
@@ -22,6 +24,7 @@ class ContrastiveLearning(nn.Module):
         super(ContrastiveLearning, self).__init__()
         self.temperature = temperature
         self.similarity_metric = similarity_metric
+        self.loss_fn = nn.CrossEntropyLoss()
 
     def compute_similarity(self, ecg_embedding: torch.Tensor, text_embedding: torch.Tensor) -> torch.Tensor:
         """
@@ -57,13 +60,33 @@ class ContrastiveLearning(nn.Module):
         """
         # Scale similarity scores by temperature
         scaled_similarity = similarity_scores / self.temperature  # Shape: (batch_size, batch_size)
-
+        '''
+            Each row i in the scale_similarity matrix contains the similarity scores between the i-th ECG 
+            embedding and all text embeddings (including its correct match).The diagonal element in the 
+            matrix corresponds to the similarity between the matching pair (i.e., ecg_embedding[i] with 
+            text_embedding[i]). The off-diagonal elements represent the similarities with non-matching 
+            embeddings, which act as negative samples.
+        '''
         # Generate labels for contrastive learning (diagonal is 1, rest is 0)
-        labels = torch.arange(batch_size).long().to(scaled_similarity.device)
-
+        labels = torch.arange(batch_size).long().to(scaled_similarity.device) #Shape (batch_size,)
+        '''
+            This creates a labels [0,1,2,3,...,batch_size-1] where each label represents the position of 
+            the corresponding "true positive" match. Specifically, labels[i] is set to i, which means that 
+            for the i-th ECG embedding, the correct text embedding (the positive pair) is expected to be 
+            at position i in the list of text embeddings.
+        '''
+        #print(f"labels: {labels}")
+        #print(f"scaled_similarity: {scaled_similarity}")
         # Compute contrastive loss (InfoNCE loss)
-        loss_fn = nn.CrossEntropyLoss()
-        loss = loss_fn(scaled_similarity, labels)
+        # https://paperswithcode.com/method/infonce
+        loss = self.loss_fn(scaled_similarity, labels)
+        '''
+            The cross-entropy loss takes scaled_similarity as input logits and labels as the ground truth.
+            Cross-entropy loss works by comparing the similarity scores across all potential pairs for a 
+            given ECG embedding. It tries to maximize the score of the correct match (the diagonal element) 
+            and minimize the scores of incorrect matches (off-diagonal elements). Using labels[i] = i means 
+            that the model is penalized if the similarity of the positive pair is not the highest in its row.
+        '''
 
         return loss
 

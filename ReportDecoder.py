@@ -18,7 +18,7 @@ class ReportDecoder(nn.Module):
 
     def __init__(self, 
                  shared_embedding_dim: int = 512, 
-                 vocab_size: int = 30522, 
+                 vocab_size: int = 50257, 
                  max_length: int = 128, 
                  num_layers: int = 6):
         """
@@ -40,6 +40,8 @@ class ReportDecoder(nn.Module):
         # Load a pre-trained language model as a decoder (using GPT-2 here as a placeholder)
         self.decoder = GPT2LMHeadModel.from_pretrained("gpt2")
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        #print(self.decoder.config.vocab_size)
+        #print(f"decoder tokenizer: {type(self.tokenizer)}")
 
         # Linear layer to project shared embeddings to the decoder input dimension
         self.embedding_projection = nn.Linear(shared_embedding_dim, self.decoder.config.n_embd)
@@ -57,15 +59,15 @@ class ReportDecoder(nn.Module):
         """
         # Project the shared embedding to the decoder's input embedding dimension
         decoder_input = self.embedding_projection(shared_embedding)  # Shape: (batch_size, n_embd)
-
         # Expand the decoder input to match the target sequence length if target text is provided
         if target_text is not None:
             batch_size = shared_embedding.size(0)
-            seq_length = target_text.size(1)
+            seq_length = target_text['input_ids'].size(1)
             decoder_input = decoder_input.unsqueeze(1).expand(-1, seq_length, -1)  # Shape: (batch_size, seq_length, n_embd)
-
+        #print(f"self.decoder: {type(self.decoder)}")
+        #print(f"decoder: {self.decoder}")
         # Forward pass through the decoder
-        outputs = self.decoder(inputs_embeds=decoder_input, labels=target_text)
+        outputs = self.decoder(inputs_embeds=decoder_input, labels=target_text['input_ids'])
         logits = outputs.logits  # Shape: (batch_size, seq_length, vocab_size)
 
         return logits
@@ -86,10 +88,10 @@ class ReportDecoder(nn.Module):
 
         # Project the shared embedding to the decoder's input embedding dimension
         decoder_input = self.embedding_projection(shared_embedding)  # Shape: (batch_size, n_embd)
-
+        #print(f"decoder_input: {decoder_input.shape}")
         # Expand the input to have the necessary sequence length for decoding (shape: (batch_size, 1, n_embd))
         decoder_input = decoder_input.unsqueeze(1)
-
+        #print(f"decoder_input unsqueezed: {decoder_input.shape}")
         # Generate tokens using the decoder
         generated_ids = self.decoder.generate(
             inputs_embeds=decoder_input,
@@ -99,7 +101,7 @@ class ReportDecoder(nn.Module):
             bos_token_id=self.tokenizer.bos_token_id,
             eos_token_id=self.tokenizer.eos_token_id
         )
-
+        #print(f"generated_ids: {generated_ids.shape}")
         # Decode the generated token IDs into text
         report_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         return report_text
@@ -118,9 +120,13 @@ class ReportDecoder(nn.Module):
         # Shift the logits and target text for computing the cross-entropy loss
         shift_logits = logits[:, :-1, :].contiguous()
         shift_target_text = target_text[:, 1:].contiguous()
-
+        #print(f"shift_logits: {shift_logits.shape}")
+        #print(f"shift_target_text: {shift_target_text.shape}")
         # Flatten the logits and target text for loss computation
-        loss_fn = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
+        #loss_fn = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
+        loss_fn = nn.CrossEntropyLoss()
+        #print(f"shift_logits.view(-1, self.vocab_size): {shift_logits.view(-1, self.vocab_size).shape}")
+        #print(f"shift_target_text.view(-1): {shift_target_text.view(-1).shape}")
         captioning_loss = loss_fn(shift_logits.view(-1, self.vocab_size), shift_target_text.view(-1))
 
         return captioning_loss

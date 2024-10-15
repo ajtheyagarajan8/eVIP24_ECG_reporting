@@ -41,7 +41,11 @@ class TrainingFramework:
         self.contrastive_learning = contrastive_learning
         self.report_decoder = report_decoder
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        torch.cuda.empty_cache() 
+        self.ecg_encoder.to(self.device)
+        self.text_encoder.to(self.device)
+        self.shared_embedding_space.to(self.device)
+        self.report_decoder.to(self.device)
         # Set default training parameters if not provided
         if training_params is None:
             self.training_params = {
@@ -66,14 +70,12 @@ class TrainingFramework:
         ecg_optimizer = optim.Adam(self.ecg_encoder.parameters(), lr=self.training_params['learning_rate'], weight_decay=self.training_params['weight_decay'])
         text_optimizer = optim.Adam(self.text_encoder.parameters(), lr=self.training_params['learning_rate'], weight_decay=self.training_params['weight_decay'])
         shared_space_optimizer = optim.Adam(self.shared_embedding_space.parameters(), lr=self.training_params['learning_rate'], weight_decay=self.training_params['weight_decay'])
-        contrastive_optimizer = optim.Adam(self.contrastive_learning.parameters(), lr=self.training_params['learning_rate'], weight_decay=self.training_params['weight_decay'])
         report_decoder_optimizer = optim.Adam(self.report_decoder.parameters(), lr=self.training_params['learning_rate'], weight_decay=self.training_params['weight_decay'])
 
         return {
             'ecg_optimizer': ecg_optimizer,
             'text_optimizer': text_optimizer,
             'shared_space_optimizer': shared_space_optimizer,
-            'contrastive_optimizer': contrastive_optimizer,
             'report_decoder_optimizer': report_decoder_optimizer
         }
 
@@ -100,21 +102,22 @@ class TrainingFramework:
         for batch_idx, batch_data in enumerate(dataloader):
             # Load data and move to device
             ecg_waveforms = batch_data['waveform'].to(self.device)
-            text_reports = batch_data['text'].to(self.device)
+            text_reports = batch_data['text']#.to(self.device)
 
             # Encode ECG and text into embeddings
             ecg_embeddings = self.ecg_encoder(ecg_waveforms)
             text_embeddings = self.text_encoder(text_reports)
-
             # Get shared embeddings using the shared embedding space
             ecg_shared, text_shared = self.shared_embedding_space(ecg_embeddings, text_embeddings)
-
             # Compute contrastive loss
             contrastive_loss = self.contrastive_learning(ecg_shared, text_shared)
 
+            #convert text_reports to tokens
+            text_reports_tokenized = self.text_encoder.tokenizer(text_reports, return_tensors="pt", padding=True, truncation=True)
+            text_reports_tokenized.to(next(self.report_decoder.parameters()).device) #send tokens to same device as decoder
             # Compute report generation loss using shared embeddings
-            logits = self.report_decoder(shared_embedding=ecg_shared, target_text=text_reports)
-            captioning_loss = self.report_decoder.compute_captioning_loss(logits, target_text=text_reports)
+            logits = self.report_decoder(shared_embedding=ecg_shared, target_text=text_reports_tokenized)
+            captioning_loss = self.report_decoder.compute_captioning_loss(logits, target_text=text_reports_tokenized['input_ids'])
 
             # Combine losses
             total_loss_value = contrastive_loss + captioning_loss
@@ -123,7 +126,6 @@ class TrainingFramework:
             self.optimizer['ecg_optimizer'].zero_grad()
             self.optimizer['text_optimizer'].zero_grad()
             self.optimizer['shared_space_optimizer'].zero_grad()
-            self.optimizer['contrastive_optimizer'].zero_grad()
             self.optimizer['report_decoder_optimizer'].zero_grad()
 
             total_loss_value.backward()
@@ -131,7 +133,6 @@ class TrainingFramework:
             self.optimizer['ecg_optimizer'].step()
             self.optimizer['text_optimizer'].step()
             self.optimizer['shared_space_optimizer'].step()
-            self.optimizer['contrastive_optimizer'].step()
             self.optimizer['report_decoder_optimizer'].step()
 
             # Accumulate loss for reporting
@@ -164,7 +165,7 @@ class TrainingFramework:
             for batch_idx, batch_data in enumerate(dataloader):
                 # Load data and move to device
                 ecg_waveforms = batch_data['waveform'].to(self.device)
-                text_reports = batch_data['text'].to(self.device)
+                text_reports = batch_data['text']#.to(self.device)
 
                 # Encode ECG and text into embeddings
                 ecg_embeddings = self.ecg_encoder(ecg_waveforms)
@@ -176,15 +177,23 @@ class TrainingFramework:
                 # Compute contrastive loss
                 contrastive_loss = self.contrastive_learning(ecg_shared, text_shared)
 
+                #convert text_reports to tokens
+                text_reports_tokenized = self.text_encoder.tokenizer(text_reports, return_tensors="pt", padding=True, truncation=True)
+                text_reports_tokenized.to(next(self.report_decoder.parameters()).device)
                 # Compute report generation loss using shared embeddings
-                logits = self.report_decoder(shared_embedding=ecg_shared, target_text=text_reports)
-                captioning_loss = self.report_decoder.compute_captioning_loss(logits, target_text=text_reports)
+                logits = self.report_decoder(shared_embedding=ecg_shared, target_text=text_reports_tokenized)
+                captioning_loss = self.report_decoder.compute_captioning_loss(logits, target_text=text_reports_tokenized['input_ids'])
 
                 # Combine losses
                 total_loss_value = contrastive_loss + captioning_loss
 
                 # Accumulate loss for reporting
                 total_loss += total_loss_value.item()
+
+                if batch_idx % 10 == 0:
+                    example_report = self.report_decoder.generate_report(ecg_shared[0].unsqueeze(0))
+                    print(f">> Actual report: \"{text_reports[0]}\"\n")
+                    print(f">> Predicted report: \"{example_report}\"\n")
 
         average_loss = total_loss / num_batches
         return average_loss

@@ -60,9 +60,9 @@ class ECGDataLoader(Dataset):
         """
         print(f"Loading data from {self.data_path}...")
         # Placeholder: Load data logic (e.g., reading CSV files, JSON, or HDF5 formats)
-        # Assume data is loaded into self.waveform_data and self.text_data
-        self.waveform_data = []  # Placeholder for waveform data
-        self.text_data = []  # Placeholder for text report data
+        
+        self.waveform_data = torch.stack([torch.randn(12, 1000) for _ in range(100)])  # 100 samples, 12 channels, 1000 time points each
+        self.text_data = [f"Dummy report text {i}\n" for i in range(100)]  # 100 dummy text reports
 
     def preprocess_waveforms(self):
         """
@@ -92,7 +92,7 @@ class ECGDataLoader(Dataset):
         Return the number of samples in the dataset.
         """
         # Placeholder: Replace with actual length of the dataset
-        return len(self.waveform_data) if self.waveform_data else 0
+        return self.waveform_data.shape[0]
 
     def __getitem__(self, index: int):
         """
@@ -141,3 +141,8 @@ class ECGDataLoader(Dataset):
         print(f"Waveform Sample {index}: {self.waveform_data[index]}")
         print(f"Text Report Sample {index}: {self.text_data[index]}")
 
+if __name__ == '__main__':
+    edl = ECGDataLoader("")
+    dl = edl.get_dataloader()
+    for b in dl:
+        print(b)
