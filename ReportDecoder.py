@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 class ReportDecoder(nn.Module):
     """
@@ -18,7 +17,7 @@ class ReportDecoder(nn.Module):
 
     def __init__(self, 
                  shared_embedding_dim: int = 512, 
-                 vocab_size: int = 50257, 
+                 decoder_name = 'biogpt', 
                  max_length: int = 128, 
                  num_layers: int = 6):
         """
@@ -33,18 +32,34 @@ class ReportDecoder(nn.Module):
         super(ReportDecoder, self).__init__()
 
         self.shared_embedding_dim = shared_embedding_dim
-        self.vocab_size = vocab_size
         self.max_length = max_length
         self.num_layers = num_layers
-
+        self.decoder_name = decoder_name
+        
         # Load a pre-trained language model as a decoder (using GPT-2 here as a placeholder)
-        self.decoder = GPT2LMHeadModel.from_pretrained("gpt2")
-        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        #print(self.decoder.config.vocab_size)
-        #print(f"decoder tokenizer: {type(self.tokenizer)}")
+        self.InitDecoder()
 
         # Linear layer to project shared embeddings to the decoder input dimension
-        self.embedding_projection = nn.Linear(shared_embedding_dim, self.decoder.config.n_embd)
+        #self.embedding_projection = nn.Linear(shared_embedding_dim, self.decoder.config.n_embd)
+        self.embedding_projection = nn.Linear(shared_embedding_dim, self.decoder_input_size)
+
+    def InitDecoder(self):
+        #TODO: add option to train transformer decoder from scratch and use Andrew's generate function
+        if self.decoder_name == 'gpt2':
+            from transformers import GPT2LMHeadModel, GPT2Tokenizer
+            self.decoder = GPT2LMHeadModel.from_pretrained("gpt2")
+            self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+            self.vocab_size = self.decoder.config.vocab_size
+            self.decoder_input_size = self.decoder.config.n_embd
+        elif self.decoder_name == 'biogpt':
+            from transformers import AutoTokenizer, AutoModelForCausalLM
+            self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
+            self.decoder = AutoModelForCausalLM.from_pretrained("microsoft/biogpt")
+            self.vocab_size = self.decoder.config.vocab_size
+            self.decoder_input_size = self.decoder.config.hidden_size
+        
+        #print(self.decoder.config.vocab_size)
+        #print(f"decoder tokenizer: {type(self.tokenizer)}")
 
     def forward(self, shared_embedding: torch.Tensor, target_text: torch.Tensor = None) -> torch.Tensor:
         """
