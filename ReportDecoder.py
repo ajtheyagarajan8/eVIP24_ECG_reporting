@@ -30,7 +30,6 @@ class ReportDecoder(nn.Module):
             num_layers (int, optional): Number of Transformer layers in the decoder (default: 6).
         """
         super(ReportDecoder, self).__init__()
-
         self.shared_embedding_dim = shared_embedding_dim
         self.max_length = max_length
         self.num_layers = num_layers
@@ -57,6 +56,7 @@ class ReportDecoder(nn.Module):
             self.decoder = AutoModelForCausalLM.from_pretrained("microsoft/biogpt")
             self.vocab_size = self.decoder.config.vocab_size
             self.decoder_input_size = self.decoder.config.hidden_size
+        
         
         #print(self.decoder.config.vocab_size)
         #print(f"decoder tokenizer: {type(self.tokenizer)}")

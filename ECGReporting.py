@@ -14,12 +14,13 @@ if __name__ == "__main__":
     contrastive_learning = ContrastiveLearning()
     report_decoder = ReportDecoder()
     
+    
     data_path_train = ""
-    ecg_dl_tr = ECGDataLoader(data_path_train)
+    ecg_dl_tr = ECGDataLoader()
     training_dataloader = ecg_dl_tr.get_dataloader()
 
     data_path_val = ""
-    ecg_dl_vl = ECGDataLoader(data_path_val)
+    ecg_dl_vl = ECGDataLoader()
     validating_dataloader = ecg_dl_vl.get_dataloader()
 
     tfw = TrainingFramework(ecg_encoder, text_encoder, shared_embedding_space, contrastive_learning, report_decoder)

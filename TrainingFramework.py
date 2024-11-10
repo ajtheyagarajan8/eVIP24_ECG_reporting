@@ -51,7 +51,7 @@ class TrainingFramework:
             self.training_params = {
                 'learning_rate': 1e-4,
                 'batch_size': 32,
-                'num_epochs': 10,
+                'num_epochs': 2,
                 'weight_decay': 1e-5
             }
         else:
@@ -240,7 +240,7 @@ class TrainingFramework:
             'report_decoder_state_dict': self.report_decoder.state_dict(),
             'optimizer_state_dict': {k: v.state_dict() for k, v in self.optimizer.items()}
         }
-        torch.save(checkpoint, file_path)
+        #torch.save(checkpoint, file_path)
         print(f"Model checkpoint saved to {file_path}")
 
     def load_checkpoint(self, file_path: str):

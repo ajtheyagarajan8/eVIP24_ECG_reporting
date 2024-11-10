@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ECGModels.ConvTransformer1D import CTN
+from torchvision import models
 
 # Placeholder for any necessary model imports (e.g., ConvNext or other architectures)
 # from some_model_library import ConvNext, ResNet
@@ -18,7 +20,7 @@ class ECGEncoder(nn.Module):
     """
 
     def __init__(self, 
-                 model_architecture: str = "ConvNext1D", 
+                 model_architecture: str = "ResNet101", 
                  embedding_dim: int = 512, 
                  signal_or_image: str = "signal", 
                  pretrained: bool = True):
@@ -51,7 +53,10 @@ class ECGEncoder(nn.Module):
         print(f"Initializing the {self.model_architecture} model...")
         
         # Placeholder: Replace with actual model initialization logic
-        if self.model_architecture == "ConvNext1D":
+        if self.model_architecture == "ConvTransformer1D":
+            self.encoder = CTN(d_model=256, dropout_rate=0.2,deepfeat_sz=64, classes=None)
+        
+        elif self.model_architecture == "ConvNext1D":
             # Example: Define a 1D ConvNext model here
             self.encoder = nn.Sequential(
                 nn.Conv1d(in_channels=12, out_channels=64, kernel_size=7, stride=2, padding=3),
@@ -63,10 +68,25 @@ class ECGEncoder(nn.Module):
                 nn.Flatten(),
                 nn.Linear(128, self.embedding_dim)
             )
-        elif self.model_architecture == "ResNet1D":
-            # Example: Define a 1D ResNet model here
-            # self.encoder = ResNet1D(pretrained=self.pretrained, embedding_dim=self.embedding_dim)
-            pass
+        elif self.model_architecture == "ResNet101":
+            # Load pre-trained ResNet-101 model
+            ResNet101 = models.resnet101(pretrained=True)
+            # Change the fc layer
+            ResNet101.fc = nn.Linear(ResNet101.fc.in_features, self.embedding_dim)
+
+            # Load the pre-trained weights, skipping the last layer
+            model_dict = ResNet101.state_dict()
+            # The weight file is larger than 100MB, avaliable here: https://drive.google.com/file/d/1RPVPYCOgwiKvm5mNSmHt6UZwjl8LVs1l/view?usp=sharing
+            pretrained_dict = torch.load('resnetPTBXL_weights.pth')
+
+            # Filter out the final fc layer weights
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and 'fc' not in k}
+
+            # Update the model's state dict with the filtered weights
+            model_dict.update(pretrained_dict)
+            ResNet101.load_state_dict(model_dict)
+
+            self.encoder = ResNet101
         else:
             raise ValueError(f"Unsupported model architecture: {self.model_architecture}")
 
