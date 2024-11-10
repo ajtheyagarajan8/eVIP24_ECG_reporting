@@ -9,6 +9,9 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 import io
+from sklearn.model_selection import train_test_split
+import random
+
 
 
 """
@@ -30,10 +33,11 @@ def collate_fn(batch):
     return {'waveform': images, 'text': reports}
 
 class ECGDataLoader(Dataset):
-    def __init__(self,
-                 batch_size: int = 2,
+    def __init__(self, split_subjects: list,
+                 batch_size: int = 16,
                  shuffle: bool = True,
                  ecg_subset: str = "mimic-iv-ecg_complete"):
+        self.split_subjects = split_subjects
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.ecg_subset = ecg_subset
@@ -74,10 +78,17 @@ class ECGDataLoader(Dataset):
         
         self.record_list['path'] = self.record_list['path'].apply(Path)
         
+        #print(f"len(record_list): {len(self.record_list)}, len(machine_reports): {len(self.machine_reports)}")
+        self.record_list = self.record_list[self.record_list['subject_id'].isin(self.split_subjects)]
+        self.machine_reports = self.machine_reports[self.machine_reports['subject_id'].isin(self.split_subjects)]
+        #print(f"len(record_list): {len(self.record_list)}, len(machine_reports): {len(self.machine_reports)}")
+        
+        '''
         under_sample_factor = self.batch_size*2 #for testing
         self.record_list = self.record_list[:under_sample_factor]
-        self.machine_reports = self.machine_reports[:under_sample_factor]
-
+        self.machine_reports = self.machine_reports[self.machine_reports['study_id'].isin(self.record_list['study_id'])]
+        #print(f"len(record_list): {len(self.record_list)}, len(machine_reports): {len(self.machine_reports)}")
+        '''
         self.admissions = pd.read_csv(
             self.hosp_path / "admissions.csv",
             usecols=[
@@ -95,7 +106,10 @@ class ECGDataLoader(Dataset):
             usecols=["icd_code", "long_title"]
         )
         # Define transform to convert matplotlib plot to tensor
-        self.transform = transforms.ToTensor()
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize((512, 512))  # Resize all images to 256x256
+        ])
 
     def __len__(self):
         # Dataset size based on the number of records in machine reports
@@ -103,21 +117,27 @@ class ECGDataLoader(Dataset):
     
     def __getitem__(self, idx):
         # Fetch the specific row from machine_reports
-        record = self.machine_reports.iloc[idx]
-        
-        # Generate ECG image and report on demand
-        study_id = record["study_id"]
-        row = self.record_list[self.record_list['study_id'] == study_id]
-        path_stem = row.iloc[0]['path']
-        #More work must be done to convers study_id to file path
-        file_path = self.ecg_path / path_stem
-        ecg_image = self.get_ecg_image(file_path)
-        
-        if ecg_image is None:
-            raise RuntimeError(f"Failed to load ECG image for {path_stem}")
+        while True:
+            try:
+                record = self.machine_reports.iloc[idx]
+                #print(f"record: {record}")
+                # Generate ECG image and report on demand
+                study_id = record["study_id"]
+                #print(f"study_id: {study_id}")
+                row = self.record_list[self.record_list['study_id'] == study_id]
+                #print(f"row: {row}")
+                path_stem = row.iloc[0]['path']
+                #More work must be done to convers study_id to file path
+                file_path = self.ecg_path / path_stem
+                ecg_image = self.get_ecg_image(file_path)
+                if ecg_image is None:
+                    raise RuntimeError(f"Failed to load ECG image for {path_stem}")
+                report = self.get_report(record)
+                break
+            except Exception as e:
+                print(f"Error loading sample at {idx}: {e}")
+                idx = random.randint(0, len(self) - 1)
 
-        report = self.get_report(record)
-        
         sample = {
             "waveform": ecg_image,
             "text": report
@@ -135,11 +155,16 @@ class ECGDataLoader(Dataset):
     def get_ecg_image(self, file_path):
         """Load and return the ECG waveform as a tensor."""
         #Performs dynamic loading, saves the image to a buffer buf
+        dpi = 300
+        # width_pixels = 2400
+        # height_pixels = 1200
+        # fig_width = width_pixels/dpi
+        # fig_height = height_pixels/dpi
         try:
             rd_record = wfdb.rdrecord(file_path)
-            fig = wfdb.plot_wfdb(record=rd_record, return_fig=True)
+            fig = wfdb.plot_wfdb(record=rd_record, figsize=(24, 18), title=None, ecg_grids='all', return_fig=True)
             buf = io.BytesIO()
-            fig.savefig(buf, format='png')
+            fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', pad_inches=0)
             plt.close(fig)
             buf.seek(0)
             image = Image.open(buf).convert("RGB")
@@ -245,14 +270,81 @@ class ECGDataLoader(Dataset):
             f"following ICD diagnos{'i' if len(ecg_icds) == 1 else 'e'}s: "
             f"{'; '.join(ecg_diagnoses)}.")
 
+class TrainValSplit:
+    def __init__(self, ecg_subset: str = "mimic-iv-ecg_complete"):
+        self.ecg_subset = ecg_subset
+        # Initialize file paths and parameters
+        self.mimiciv_root_dir = Path.cwd().joinpath("MIMIC-IV-data")
+        
+        self.mimic_ecg_matched_path = self.mimiciv_root_dir / "mimic-iv-ecg-matched-subset"
+        self.ecg_meta_path = self.mimic_ecg_matched_path / "meta_files"
+        
+        self.ecg_path = self.mimic_ecg_matched_path / self.ecg_subset
+        
+        #match machine_reports with the file paths in record_list.csv
+        if (self.ecg_path / "record_list.csv").exists():
+            #for subsets other than mimic-iv-ecg_complete you have to make your own record_list.csv
+            if self.ecg_path / "record_list.csv".exists():
+                self.record_list = pd.read_csv(self.ecg_path / "record_list.csv",na_filter=False)
+            else: #if you don't have a record list for ecg_subset bob will build one
+                from BuildRecordList import BuildRecordList
+                bob = BuildRecordList(self.ecg_subset)
+                bob.build()
+                self.record_list = pd.read_csv(self.ecg_path / "record_list.csv",na_filter=False)
+            self.machine_reports = self.machine_reports[self.machine_reports['study_id'].isin(self.record_list['study_id'])]
+        else: #there shouldn't be a record_list in mimic-iv-ecg_complete since we just use the official record list in meta_files
+            self.record_list = pd.read_csv(
+                self.ecg_meta_path / "record_list.csv",
+                na_filter=False,
+            )
+        
+        self.subject_ids = self.record_list['subject_id'].unique()
+    
+    def train_val_split(self, val_ratio: float = 0.2, random_seed: int = 42):
+        train_subjects, val_subjects = train_test_split(
+            self.subject_ids,
+            test_size=val_ratio,
+            random_state=random_seed
+        )
+        return train_subjects, val_subjects
+    
+
+
+def show_ecg_batch(batch_images, batch_size=4, figsize=(15, 15)):
+    """
+    Display a batch of ECG images.
+
+    Args:
+        batch_images (torch.Tensor): A batch of images from the DataLoader.
+        batch_size (int): Number of images to display in one row/column of the grid.
+        figsize (tuple): Size of the matplotlib figure.
+    """
+    # Convert tensor to numpy array and remove any channel dimension
+    batch_images = batch_images.detach().cpu()
+    
+    # Set up plot grid
+    fig, axes = plt.subplots(batch_size, figsize=figsize)
+    for i in range(batch_size):
+        image = batch_images[i].permute(1, 2, 0).numpy()
+        axes.imshow(image)  # Display image in grayscale
+        axes.axis("off")  # Hide axes for clarity
+
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
-    data_loader = DataLoader2()
+    tvs = TrainValSplit()
+    tr, vl = tvs.train_val_split()
+    
+    
+    data_loader = ECGDataLoader(tr)
+    print(len(data_loader))
     dl = data_loader.get_dataloader()
-    lim = 10
+    lim = 1
     cur = 1
     for b in dl:
-        print(b)
+        show_ecg_batch(b['waveform'], batch_size=1)
         if cur > lim:
             break
         cur+=1

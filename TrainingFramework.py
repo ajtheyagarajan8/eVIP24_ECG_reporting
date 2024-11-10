@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import pandas as pd
 from torch.utils.data import DataLoader
 
 class TrainingFramework:
@@ -51,7 +52,7 @@ class TrainingFramework:
             self.training_params = {
                 'learning_rate': 1e-4,
                 'batch_size': 32,
-                'num_epochs': 2,
+                'num_epochs': 100,
                 'weight_decay': 1e-5
             }
         else:
@@ -96,8 +97,11 @@ class TrainingFramework:
         self.contrastive_learning.train()
         self.report_decoder.train()
 
+        total_contrastive_loss = 0.0
+        total_captioning_loss = 0.0
         total_loss = 0.0
         num_batches = len(dataloader)
+        report_comparison = ""
 
         for batch_idx, batch_data in enumerate(dataloader):
             # Load data and move to device
@@ -111,6 +115,7 @@ class TrainingFramework:
             ecg_shared, text_shared = self.shared_embedding_space(ecg_embeddings, text_embeddings)
             # Compute contrastive loss
             contrastive_loss = self.contrastive_learning(ecg_shared, text_shared)
+            total_contrastive_loss += contrastive_loss.item()
 
             #convert text_reports to tokens
             text_reports_tokenized = self.text_encoder.tokenizer(text_reports, return_tensors="pt", padding=True, truncation=True)
@@ -118,7 +123,7 @@ class TrainingFramework:
             # Compute report generation loss using shared embeddings
             logits = self.report_decoder(shared_embedding=ecg_shared, target_text=text_reports_tokenized)
             captioning_loss = self.report_decoder.compute_captioning_loss(logits, target_text=text_reports_tokenized['input_ids'])
-
+            total_captioning_loss += captioning_loss.item()
             # Combine losses
             total_loss_value = contrastive_loss + captioning_loss
 
@@ -138,11 +143,26 @@ class TrainingFramework:
             # Accumulate loss for reporting
             total_loss += total_loss_value.item()
             print(f"Epoch [{epoch + 1}/{self.training_params['num_epochs']}], Batch [{batch_idx + 1}/{num_batches}], Loss: {total_loss_value.item()}")
+            if batch_idx % 10 == 0:
+                example_report = self.report_decoder.generate_report(ecg_shared[0].unsqueeze(0))
+                actual_report = f">>Actual report: \"{text_reports[0]}\"\n"
+                predicted_report = f">>Predicted report: \"{example_report}\"\n"
+                print(actual_report)
+                print(predicted_report)
 
+        avg_contrastive_loss = total_contrastive_loss / num_batches
+        avg_captioning_loss = total_captioning_loss / num_batches
+        avg_total_loss = total_loss / num_batches
+        loss_df = pd.DataFrame({
+            "epoch": epoch,
+            "avg_contrastive_loss": [avg_contrastive_loss],
+            "avg_captioning_loss": [avg_captioning_loss],
+            "avg_total_loss": [avg_total_loss]
+        })
         average_loss = total_loss / num_batches
-        return average_loss
+        return average_loss, loss_df
 
-    def validate_one_epoch(self, dataloader: DataLoader) -> float:
+    def validate_one_epoch(self, dataloader: DataLoader, epoch: int) -> float:
         """
         Validate the model for one epoch.
 
@@ -158,8 +178,11 @@ class TrainingFramework:
         self.contrastive_learning.eval()
         self.report_decoder.eval()
 
+        total_contrastive_loss = 0.0
+        total_captioning_loss = 0.0
         total_loss = 0.0
         num_batches = len(dataloader)
+        report_comparison = ""
 
         with torch.no_grad():
             for batch_idx, batch_data in enumerate(dataloader):
@@ -176,6 +199,7 @@ class TrainingFramework:
 
                 # Compute contrastive loss
                 contrastive_loss = self.contrastive_learning(ecg_shared, text_shared)
+                total_contrastive_loss += contrastive_loss.item()
 
                 #convert text_reports to tokens
                 text_reports_tokenized = self.text_encoder.tokenizer(text_reports, return_tensors="pt", padding=True, truncation=True)
@@ -183,7 +207,7 @@ class TrainingFramework:
                 # Compute report generation loss using shared embeddings
                 logits = self.report_decoder(shared_embedding=ecg_shared, target_text=text_reports_tokenized)
                 captioning_loss = self.report_decoder.compute_captioning_loss(logits, target_text=text_reports_tokenized['input_ids'])
-
+                total_captioning_loss += captioning_loss.item()
                 # Combine losses
                 total_loss_value = contrastive_loss + captioning_loss
 
@@ -192,11 +216,25 @@ class TrainingFramework:
 
                 if batch_idx % 10 == 0:
                     example_report = self.report_decoder.generate_report(ecg_shared[0].unsqueeze(0))
-                    print(f">> Actual report: \"{text_reports[0]}\"\n")
-                    print(f">> Predicted report: \"{example_report}\"\n")
-
+                    actual_report = f">>Actual report: \"{text_reports[0]}\"\n"
+                    predicted_report = f">>Predicted report: \"{example_report}\"\n"
+                    print(actual_report)
+                    print(predicted_report)
+                    report_comparison+=f">Batch: {batch_idx}"
+                    report_comparison+=actual_report
+                    report_comparison+=predicted_report
+        
+        avg_contrastive_loss = total_contrastive_loss / num_batches
+        avg_captioning_loss = total_captioning_loss / num_batches
+        avg_total_loss = total_loss / num_batches
+        loss_df = pd.DataFrame({
+            "epoch": epoch,
+            "avg_contrastive_loss": [avg_contrastive_loss],
+            "avg_captioning_loss": [avg_captioning_loss],
+            "avg_total_loss": [avg_total_loss]
+        })
         average_loss = total_loss / num_batches
-        return average_loss
+        return average_loss, loss_df
 
     def train(self, train_dataloader: DataLoader, val_dataloader: DataLoader):
         """
@@ -207,17 +245,22 @@ class TrainingFramework:
             val_dataloader (DataLoader): DataLoader for validation data.
         """
         best_val_loss = float('inf')
+        train_df = pd.DataFrame(columns=["epoch", "avg_contrastive_loss", "avg_captioning_loss", "avg_total_loss"])
+        val_df = pd.DataFrame(columns=["epoch", "avg_contrastive_loss", "avg_captioning_loss", "avg_total_loss"])
 
         for epoch in range(self.training_params['num_epochs']):
             print(f"Starting epoch {epoch + 1}/{self.training_params['num_epochs']}")
 
             # Train for one epoch
-            train_loss = self.train_one_epoch(train_dataloader, epoch)
+            train_loss, train_results_df = self.train_one_epoch(train_dataloader, epoch)
             print(f"Epoch [{epoch + 1}], Training Loss: {train_loss}")
-
+            train_df = pd.concat([train_df, train_results_df], ignore_index=True)
+            train_df.to_csv("train_results.csv")
             # Validate for one epoch
-            val_loss = self.validate_one_epoch(val_dataloader)
+            val_loss, val_results_df = self.validate_one_epoch(val_dataloader, epoch)
             print(f"Epoch [{epoch + 1}], Validation Loss: {val_loss}")
+            val_df = pd.concat([val_df, val_results_df], ignore_index=True)
+            val_df.to_csv("val_results.csv")
 
             # Save model if validation loss improves
             if val_loss < best_val_loss:
@@ -240,7 +283,7 @@ class TrainingFramework:
             'report_decoder_state_dict': self.report_decoder.state_dict(),
             'optimizer_state_dict': {k: v.state_dict() for k, v in self.optimizer.items()}
         }
-        #torch.save(checkpoint, file_path)
+        torch.save(checkpoint, file_path)
         print(f"Model checkpoint saved to {file_path}")
 
     def load_checkpoint(self, file_path: str):
