@@ -1,0 +1,8 @@
+>Batch: 0
+>>Actual report: "This waveform record has the following summary measurements: The average RR interval is 722msec. On average, the onset of the P-wave occurs at 40msec and the end of the P-wave at 124msec; the onset of the QRS complex occurs at 162msec and the end of the QRS complex at 246msec; and the end of the T-wave occurs at 504msec. The electrical axis is 77 degrees for the P-wave, 75 degrees for the QRS complex, and 75 degrees for the T-wave. The following machine-generated ECG reports were recorded: Sinus rhythm; Possible right atrial abnormality; Borderline ECG. No diagnosis was recorded for this hospital admission."
+>>Text predicted report: ", and the other in the form of a single-stranded DNA."
+>>ECG predicted report: "in the presence of the inhibitor."
+>Batch: 0
+>>Actual report: "This waveform record has the following summary measurements: The average RR interval is 659msec. On average, the onset of the P-wave occurs at 40msec and the end of the P-wave at 128msec; the onset of the QRS complex occurs at 170msec and the end of the QRS complex at 258msec; and the end of the T-wave occurs at 518msec. The electrical axis is 81 degrees for the P-wave, 77 degrees for the QRS complex, and 77 degrees for the T-wave. The following machine-generated ECG reports were recorded: Sinus rhythm; Possible right atrial abnormality; Borderline ECG. No diagnosis was recorded for this hospital admission."
+>>Text predicted report: ", and the other two were not."
+>>ECG predicted report: "in the presence of the drug."

@@ -31,7 +31,7 @@ class BuildRecordList:
                     self.record_list = pd.concat([self.record_list, pd.DataFrame([row])], ignore_index=True)
         matched_subset = self.record_list.merge(self.parent_record_list[['path', 'ecg_time']], on='path', how='left')
 
-        matched_subset.to_csv(self.ecg_path/"record_list_.csv", index=False)
+        matched_subset.to_csv(self.ecg_path/"record_list.csv", index=False)
 
 
                     

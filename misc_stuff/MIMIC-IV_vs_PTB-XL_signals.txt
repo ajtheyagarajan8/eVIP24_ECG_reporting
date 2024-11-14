@@ -1,0 +1,20 @@
+Referring to this for formatting guide: https://physionet.org/physiotools/wag/header-5.htm
+
+Record Line 
+>PTB-XL: 00001_lr 12 100 1000
+>> 12 signals, 100Hz sampling freq, 1000 samples
+>MIMIC-IV: 48446569 12 500 5000 13:52:00 18/09/2183
+>> 12 signals, 500Hz sampling freq, 5000 samples
+
+
+Signal Specification Line
+>PTB-XL: 00001_lr.dat 16 1000.0(0)/mV 16 0 -119 1508 0 I
+>> 16 bit, ADC gain of 1000mV. 16 bit ADC resolution, ADC middle is 0, initial value of -119, checksum 1508
+>MIMIC-IV: 48446569.dat 16 200.0(0)/mV 16 0 0 56952 0 I
+>> 16 bit, ADC gain of 200mV, 16 bit ADC resolution, ADC middle is 0, initial vale of 0, checksum 56952
+
+initial value specifies the value of sample 0 in the signal
+
+Therefore to make MIMIC-IV signal perfectly compatible with a pretrained model on PTB-XL, we should multiply the signal by 1000/200=5 to account for gain difference and subtract all the initial values used in PTB-XL
+
+PTB-XL images were generated from the version of the signal that was downsampled from 500Hz to 100Hz. The 1000 samples still corresponds to 10s. This was called `ecg_plot.plot(ecg, sample_rate = 500, title = ' ', style = 'bw')`. By default the function sets columns=2. Using sampling rate of 500 meant that the max x-value (seconds) is 2*(1000/500) = 4.0. Using the same code for MIMIC-IV, it sets the max x-value to 2*(5000/500) = 20.0. To make both images display the same we can just set sample_rate = 2500 for MIMIC-IV

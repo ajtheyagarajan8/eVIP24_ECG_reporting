@@ -17,7 +17,7 @@ class SharedEmbeddingSpace(nn.Module):
     def __init__(self, 
                  ecg_embedding_dim: int = 512, 
                  text_embedding_dim: int = 512, 
-                 shared_embedding_dim: int = 512):
+                 shared_embedding_dim: int = 256):
         """
         Initialize the SharedEmbeddingSpace.
 

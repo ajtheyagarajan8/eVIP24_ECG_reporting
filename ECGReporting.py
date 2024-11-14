@@ -16,13 +16,15 @@ if __name__ == "__main__":
     contrastive_learning = ContrastiveLearning()
     report_decoder = ReportDecoder()
     
-    tvs = TrainValSplit()
-    tr_subjects, vl_subjects = tvs.train_val_split()
+    #tvs = TrainValSplit()
+    #tr_subjects, vl_subjects = tvs.train_val_split()
+    tr_subjects = [10000032, 10000117, 10000285]
+    vl_subjects = [10000560, 10000635]
 
-    ecg_dl_tr = ECGDataLoader(tr_subjects)
+    ecg_dl_tr = ECGDataLoader(split_subjects=tr_subjects, dynamic_loading=False, ecg_subset="mimic-iv-ecg_complete_300x300_narrow_images")
     training_dataloader = ecg_dl_tr.get_dataloader()
 
-    ecg_dl_vl = ECGDataLoader(vl_subjects)
+    ecg_dl_vl = ECGDataLoader(split_subjects=vl_subjects, dynamic_loading=False, ecg_subset="mimic-iv-ecg_complete_300x300_narrow_images")
     validating_dataloader = ecg_dl_vl.get_dataloader()
 
     tfw = TrainingFramework(ecg_encoder, text_encoder, shared_embedding_space, contrastive_learning, report_decoder)

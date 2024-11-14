@@ -16,7 +16,7 @@ class ReportDecoder(nn.Module):
     """
 
     def __init__(self, 
-                 shared_embedding_dim: int = 512, 
+                 shared_embedding_dim: int = 256, 
                  decoder_name = 'biogpt', 
                  max_length: int = 128, 
                  num_layers: int = 6):

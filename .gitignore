@@ -1,8 +1,11 @@
+# all ecg data
+mimic-iv-ecg-matched-subset/
 #mimic-iv data
 *.csv
 *.gz
 *.dat
 *.hea
+*.png
 #index.html files in ECG data
 *.html
 #PyTorch models
