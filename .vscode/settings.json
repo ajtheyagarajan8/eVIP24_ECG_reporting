@@ -1,0 +1,6 @@
+{
+    "python.analysis.exclude": [
+        "**/MIMIC-IV-data/mimic-iv-ecg-matched-subset/**"
+    ],
+    "python.analysis.indexing": false
+}

@@ -1,22 +1,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
-#This basically just implements a loss function
-#In pytorch, loss functions also inherit from nn.Module
 class ContrastiveLearning(nn.Module):
     """
-    ContrastiveLearning class for implementing contrastive learning between ECG and text embeddings.
+    ContrastiveLearning class for implementing contrastive loss between ECG and text metric embeddings.
 
     Attributes:
         temperature (float): Temperature parameter used to scale the logits for contrastive loss.
         similarity_metric (str): Type of similarity metric to use ('cosine' or 'dot').
+        loss_fn (nn.CrossEntropyLoss)
+        temperature
     """
 
-    def __init__(self, temperature: float = 0.07, similarity_metric: str = 'cosine'):
+    def __init__(self, temperature: float = 1.0, similarity_metric: str = 'dot'):
         """
-        Initialize the ContrastiveLearning module.
-
         Args:
             temperature (float, optional): Temperature parameter for scaling the logits (default: 0.07).
             similarity_metric (str, optional): Similarity metric to use for computing similarity scores ('cosine' or 'dot', default: 'cosine').
@@ -25,24 +24,35 @@ class ContrastiveLearning(nn.Module):
         self.temperature = temperature
         self.similarity_metric = similarity_metric
         self.loss_fn = nn.CrossEntropyLoss()
+        #TODO make temperature a learnable parameter:
+        #self.temperature = nn.Parameter(torch.Tensor([1.]))
+        self.temperature = 1.0
 
     def compute_similarity(self, ecg_embedding: torch.Tensor, text_embedding: torch.Tensor) -> torch.Tensor:
         """
         Compute similarity between ECG and text embeddings using the specified similarity metric.
 
         Args:
-            ecg_embedding (torch.Tensor): Projected ECG embeddings in the shared space.
-            text_embedding (torch.Tensor): Projected text embeddings in the shared space.
+            ecg_embedding (torch.Tensor): Projected ECG embeddings in the shared metric space.
+            text_embedding (torch.Tensor): Projected text embeddings in the shared metric space.
 
         Returns:
             torch.Tensor: Similarity scores of shape (batch_size, batch_size).
         """
-        if self.similarity_metric == 'cosine':
-            ecg_normalized = F.normalize(ecg_embedding, p=2, dim=-1)
-            text_normalized = F.normalize(text_embedding, p=2, dim=-1)
-            similarity_scores = torch.matmul(ecg_normalized, text_normalized.T)  # Shape: (batch_size, batch_size)
-        elif self.similarity_metric == 'dot':
-            similarity_scores = torch.matmul(ecg_embedding, text_embedding.T)  # Shape: (batch_size, batch_size)
+        if self.similarity_metric == 'dot':
+            similarity_scores = torch.einsum('i d, j d -> i j', text_embedding, ecg_embedding)
+            #TODO make temperature a learnable parameter:
+            #similarity_scores = similarity_scores * self.temperature.exp()
+            similarity_scores = similarity_scores * math.exp(self.temperature)
+            
+            #similarity_scores = torch.matmul(ecg_embedding, text_embedding.T)  # Shape: (batch_size, batch_size)
+            '''
+                Each row i in the scale_similarity matrix contains the similarity scores between the i-th ECG 
+                embedding and all text embeddings (including its correct match).The diagonal element in the 
+                matrix corresponds to the similarity between the matching positive pairs (i.e., ecg_embedding[i] with 
+                text_embedding[i]). The off-diagonal elements represent the similarities with non-matching 
+                embeddings, which act as negative samples.
+            '''
         else:
             raise ValueError(f"Unsupported similarity metric: {self.similarity_metric}")
         return similarity_scores
@@ -58,17 +68,9 @@ class ContrastiveLearning(nn.Module):
         Returns:
             torch.Tensor: Contrastive loss value.
         """
-        # Scale similarity scores by temperature
-        scaled_similarity = similarity_scores / self.temperature  # Shape: (batch_size, batch_size)
-        '''
-            Each row i in the scale_similarity matrix contains the similarity scores between the i-th ECG 
-            embedding and all text embeddings (including its correct match).The diagonal element in the 
-            matrix corresponds to the similarity between the matching pair (i.e., ecg_embedding[i] with 
-            text_embedding[i]). The off-diagonal elements represent the similarities with non-matching 
-            embeddings, which act as negative samples.
-        '''
+        
         # Generate labels for contrastive learning (diagonal is 1, rest is 0)
-        labels = torch.arange(batch_size).long().to(scaled_similarity.device) #Shape (batch_size,)
+        labels = torch.arange(batch_size, device=similarity_scores.device).long() #Shape (batch_size,)
         '''
             This creates a labels [0,1,2,3,...,batch_size-1] where each label represents the position of 
             the corresponding "true positive" match. Specifically, labels[i] is set to i, which means that 
@@ -77,9 +79,7 @@ class ContrastiveLearning(nn.Module):
         '''
         #print(f"labels: {labels}")
         #print(f"scaled_similarity: {scaled_similarity}")
-        # Compute contrastive loss (InfoNCE loss)
-        # https://paperswithcode.com/method/infonce
-        loss = self.loss_fn(scaled_similarity, labels)
+        loss = (self.loss_fn(similarity_scores, labels) + self.loss_fn(similarity_scores.t(), labels))*0.5
         '''
             The cross-entropy loss takes scaled_similarity as input logits and labels as the ground truth.
             Cross-entropy loss works by comparing the similarity scores across all potential pairs for a 
@@ -87,7 +87,6 @@ class ContrastiveLearning(nn.Module):
             and minimize the scores of incorrect matches (off-diagonal elements). Using labels[i] = i means 
             that the model is penalized if the similarity of the positive pair is not the highest in its row.
         '''
-
         return loss
 
     def forward(self, ecg_embedding: torch.Tensor, text_embedding: torch.Tensor) -> torch.Tensor:
@@ -95,62 +94,22 @@ class ContrastiveLearning(nn.Module):
         Forward pass to compute the contrastive loss between ECG and text embeddings.
 
         Args:
-            ecg_embedding (torch.Tensor): Input ECG embeddings of shape (batch_size, shared_embedding_dim).
-            text_embedding (torch.Tensor): Input text embeddings of shape (batch_size, shared_embedding_dim).
+            ecg_embedding (torch.Tensor): Input ECG embeddings of shape (batch_size, shared_metric_embedding_dim).
+            text_embedding (torch.Tensor): Input text embeddings of shape (batch_size, shared_metric_embedding_dim).
 
         Returns:
             torch.Tensor: Contrastive loss value.
         """
+        #print("ContrastiveLearning forward...")
+        #print(f">Inputs ecg_embedding: {ecg_embedding.shape}, text_embedding: {text_embedding.shape}")
         # Compute similarity between ECG and text embeddings
         similarity_scores = self.compute_similarity(ecg_embedding, text_embedding)
-
+        #print(f">Similarity scores: {similarity_scores.shape}")
         # Compute contrastive loss using similarity scores
         batch_size = ecg_embedding.size(0)
         loss = self.contrastive_loss(similarity_scores, batch_size)
-
+        #print(f">Outputs loss: {loss}")
         return loss
-
-    def train_step(self, ecg_embedding: torch.Tensor, text_embedding: torch.Tensor, optimizer: torch.optim.Optimizer) -> float:
-        """
-        Single training step for contrastive learning.
-
-        Args:
-            ecg_embedding (torch.Tensor): Input ECG embeddings.
-            text_embedding (torch.Tensor): Input text embeddings.
-            optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
-
-        Returns:
-            float: Computed contrastive loss value for this step.
-        """
-        # Zero the parameter gradients
-        optimizer.zero_grad()
-
-        # Compute the contrastive loss
-        loss = self.forward(ecg_embedding, text_embedding)
-
-        # Backpropagate the loss
-        loss.backward()
-
-        # Update the parameters using the optimizer
-        optimizer.step()
-
-        return loss.item()
-
-    def evaluate(self, ecg_embedding: torch.Tensor, text_embedding: torch.Tensor) -> float:
-        """
-        Evaluate the model's performance using contrastive loss.
-
-        Args:
-            ecg_embedding (torch.Tensor): Input ECG embeddings.
-            text_embedding (torch.Tensor): Input text embeddings.
-
-        Returns:
-            float: Computed contrastive loss value for evaluation.
-        """
-        with torch.no_grad():
-            # Compute the contrastive loss without backpropagation
-            loss = self.forward(ecg_embedding, text_embedding)
-        return loss.item()
 
     def display_model_summary(self):
         """
@@ -160,8 +119,9 @@ class ContrastiveLearning(nn.Module):
         print(self)
 
 
-# Example usage of ContrastiveLearning with placeholder functions:
 if __name__ == "__main__":
+    #TODO: update this testing
+
     # Create an instance of ContrastiveLearning with default parameters
     contrastive_learning = ContrastiveLearning(temperature=0.07, similarity_metric='cosine')
 

@@ -1,36 +1,35 @@
 import torch
 import torch.nn as nn
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, T5EncoderModel, T5Tokenizer, GPT2LMHeadModel, GPT2Tokenizer
 
+#facebook/bart-base
 class TextEncoder(nn.Module):
     """
-    TextEncoder class for encoding cardiologist reports into a shared embedding space using a pre-trained text model.
+    TextEncoder class for encoding cardiologist reports into a representation embedding using a pre-trained model and projection layers.
 
     Attributes:
-        pretrained_model (str): Name or path of the pre-trained text model to use.
-        embedding_dim (int): Dimension of the shared embedding space.
-        model (nn.Module): Loaded pre-trained text model.
+        pretrained_model (str): Name or path of the pre-trained text model to use. Supports: "michiyasunaga/BioLinkBERT-base", "t5-small", "facebook/bart-base"
+        embedding_dim (int): Dimension of the pre-trained text encoder embedding (output of TextEncoder).
+        model (nn.Module): Loaded pre-trained text encoder model.
         tokenizer (AutoTokenizer): Tokenizer corresponding to the pre-trained model.
+        hidden_size (int): Size of the output layer of the pre-trained encoder
+        representation_embedding_projection_1 (nn.Module): first text representation embedding layer
+        representation_embedding_projection_2 (nn.Module): second and final text representation embedding layer
     """
     
-    def __init__(self, 
-                 pretrained_model: str = "michiyasunaga/BioLinkBERT-base", 
-                 embedding_dim: int = 512):
+    def __init__(self, pretrained_model: str = "michiyasunaga/BioLinkBERT-base"):
         """
-        Initialize the TextEncoder.
-
         Args:
             pretrained_model (str, optional): Name or path of the pre-trained text model (default: "michiyasunaga/BioLinkBERT-base").
-            embedding_dim (int, optional): Dimension of the shared embedding space (default: 512).
         """
         super(TextEncoder, self).__init__()
         
         self.pretrained_model = pretrained_model
-        self.embedding_dim = embedding_dim
         
         # Placeholder for model and tokenizer
         self.model = None
         self.tokenizer = None
+        self.embedding_dim = None
 
         # Initialize the model and tokenizer
         self.initialize_model()
@@ -39,43 +38,70 @@ class TextEncoder(nn.Module):
         """
         Initialize the pre-trained text model and its tokenizer.
         """
-        print(f"Loading pre-trained model: {self.pretrained_model}...")
-        # Load the pre-trained text model and corresponding tokenizer
-        self.model = AutoModel.from_pretrained(self.pretrained_model)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model)
-
-        # Optional: Project output to the specified embedding dimension if needed
-        self.embedding_projection = nn.Linear(self.model.config.hidden_size, self.embedding_dim)
+        print("Initializing TextEncoder...")
+        if "t5" in self.pretrained_model:
+            print(f"Loading T5 encoder model: {self.pretrained_model}...")
+            self.model = T5EncoderModel.from_pretrained(self.pretrained_model)
+            self.tokenizer = T5Tokenizer.from_pretrained(self.pretrained_model)
+            #TODO: set something like model_max_length?
+        else:
+            print(f"Loading pre-trained model: {self.pretrained_model}...")
+            self.model = AutoModel.from_pretrained(self.pretrained_model)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model)
+            #self.tokenizer.model_max_length = 1000
+        
+        if "bart" in self.pretrained_model:
+            self.model = self.model.encoder
+        self.embedding_dim = self.model.config.hidden_size
+        print(f"> TextEncoder embedding_dim: {self.embedding_dim}")
 
     def forward(self, text_input: str) -> torch.Tensor:
         """
         Forward pass through the TextEncoder to obtain text embeddings.
 
         Args:
-            text_input (str): Input text string to encode.
+            text_input List[str]: List of input text strings to encode. len(text_input)==batch_size
 
         Returns:
             torch.Tensor: Encoded text embedding of shape (batch_size, embedding_dim).
         """
+        #print("TextEncoder.forward...")
         if self.model is None or self.tokenizer is None:
             raise ValueError("Model or tokenizer has not been initialized.")
-
+        
         # Tokenize the input text and create a tensor representation
         inputs = self.tokenizer(text_input, return_tensors="pt", padding=True, truncation=True)
-        inputs.to(next(self.parameters()).device)
+        #print(f"> TextEncoder tokenized len(inputs['input_ids']): {len(inputs['input_ids'])}")
+        #print(f"> inputs['input_ids'][0].shape: {inputs['input_ids'][0].shape}")
         
-        #print(f"TextEncoder inputs after tokenization: {inputs['input_ids'].shape}")
-        # Forward pass through the model to get hidden states
+        inputs.to(next(self.parameters()).device)
         with torch.no_grad():
             outputs = self.model(**inputs)
+        #print(f"> TextEncoder outputs.last_hidden_state.shape: {outputs.last_hidden_state.shape}")
         
-        # Get the last hidden state (or use [CLS] token embedding)
-        last_hidden_state = outputs.last_hidden_state  # Shape: (batch_size, sequence_length, hidden_size)
+        # T5 outputs a different structure than standard BERT-like models
+        if "t5" in self.pretrained_model:
+            # T5 returns only hidden states in the outputs
+            last_hidden_state = outputs.last_hidden_state  # Shape: (batch_size, sequence_length, hidden_size)
+            attention_mask = inputs['attention_mask']  # Shape: (batch_size, sequence_length)
 
-        # Optional: Project to the shared embedding dimension
-        text_embedding = self.embedding_projection(last_hidden_state[:, 0, :])  # Shape: (batch_size, embedding_dim)
+            # Expand attention mask to match the dimensions of last_hidden_state
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()  # Shape: (batch_size, sequence_length, hidden_size)
 
-
+            # Perform mean pooling to get single embedding 
+            sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, dim=1)  # shape (batch_size, hidden_size)
+            sum_mask = input_mask_expanded.sum(dim=1)  # shape: (batch_size, hidden_size)
+            sum_mask = torch.clamp(sum_mask, min=1e-9)  # avoid division by zero
+            mean_pooled = sum_embeddings / sum_mask  # shape: (batch_size, hidden_size)
+            text_embedding = mean_pooled
+            #print(f"> mean_pooled.shape: {mean_pooled.shape}")
+        else:
+            last_hidden_state = outputs.last_hidden_state  # Shape: (batch_size, sequence_length, hidden_size)
+            # Use the [CLS] token representation (first token)
+            cls_embedding = last_hidden_state[:, 0, :]  # Shape: (batch_size, hidden_size)
+            #print(f"> cls_embedding.shape: {cls_embedding.shape}")
+            text_embedding = cls_embedding
+        #print(f"> text_embedding.shape: {text_embedding.shape}")
         return text_embedding
 
     def save_model(self, file_path: str):
@@ -124,10 +150,13 @@ class TextEncoder(nn.Module):
 # Example usage of TextEncoder with placeholder functions:
 if __name__ == "__main__":
     # Create an instance of TextEncoder with default parameters
-    text_encoder = TextEncoder(pretrained_model="michiyasunaga/BioLinkBERT-base", embedding_dim=512)
+    pretrained_model = "michiyasunaga/BioLinkBERT-base"
+    #pretrained_model = "t5-small"
+    #pretrained_model = "facebook/bart-base"
+    text_encoder = TextEncoder(pretrained_model=pretrained_model, embedding_dim=512)
 
     # Print the model summary
-    text_encoder.display_model_summary()
+    #text_encoder.display_model_summary()
 
     # Example input text
     example_text = "Patient exhibits signs of atrial fibrillation with irregular R-R intervals."

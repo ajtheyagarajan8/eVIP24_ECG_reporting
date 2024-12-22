@@ -1,35 +1,59 @@
 from TrainingFramework import TrainingFramework
 from ECGEncoder import ECGEncoder
 from TextEncoder import TextEncoder
-from SharedEmbeddingSpace import SharedEmbeddingSpace
+from SharedMetricSpace import SharedMetricSpace
 from ContrastiveLearning import ContrastiveLearning
 from ReportDecoder import ReportDecoder
 
-from ECGDataLoader import ECGDataLoader, TrainValSplit
+from ECGDataLoader import ECGDataLoader, ECGDataBase
+import warnings
+warnings.filterwarnings("ignore")
+
+#KEY ISSUES
+# > CoCa produces sequence-aware embeddings and decodes this to text. We are attempting to decode a single (CLS) embedding, which is very ineffective
 
 RANDOM_SEED = 42
 
+TRAINING_PARAMS = {
+            'num_epochs': 2,
+            'batch_size': 8,
+            'caption_loss_weight': 2,
+            'contrastive_loss_weight': 1
+        }
+ECG_DATA_DIR_SUBSET_IMAGES = "mimic-iv-ecg_complete_300x300_images_to_p1067"
+ECG_DATA_DIR_MINI_SUBSET_IMAGES = "mimic-iv-ecg_complete_300x300_images"
+
 if __name__ == "__main__":
-    ecg_encoder = ECGEncoder()
-    text_encoder = TextEncoder()
-    shared_embedding_space = SharedEmbeddingSpace()
-    contrastive_learning = ContrastiveLearning()
-    report_decoder = ReportDecoder()
+    #Instantiate database
+    edb = ECGDataBase(ecg_data_dir=ECG_DATA_DIR_MINI_SUBSET_IMAGES)
+    #uncomment to randomly remove N-100 samples from the database:
+    #edb.random_undersample(100)
     
-    #tvs = TrainValSplit()
-    #tr_subjects, vl_subjects = tvs.train_val_split()
-    tr_subjects = [10000032, 10000117, 10000285]
-    vl_subjects = [10000560, 10000635]
+    #Subject-wise train val split 
+    tr_subjects, vl_subjects = edb.train_val_split()
+    print(f"tr_subjects: {len(tr_subjects)}")
+    print(f"vl_subjects: {len(vl_subjects)}")
 
-    ecg_dl_tr = ECGDataLoader(split_subjects=tr_subjects, dynamic_loading=False, ecg_subset="mimic-iv-ecg_complete_300x300_narrow_images")
-    training_dataloader = ecg_dl_tr.get_dataloader()
+    #Instantiate ECGDataLoader objects to get a torch.utils.data.DataLoaders for train and validation sets
+    tr_edl = ECGDataLoader(database=edb, split_subjects=tr_subjects, dynamic_loading=False, batch_size=TRAINING_PARAMS['batch_size'], shuffle=True)
+    tr_dl = tr_edl.get_dataloader()
+    vl_edl = ECGDataLoader(database=edb, split_subjects=vl_subjects, dynamic_loading=False, batch_size=TRAINING_PARAMS['batch_size'], shuffle=True)
+    vl_dl = vl_edl.get_dataloader()
 
-    ecg_dl_vl = ECGDataLoader(split_subjects=vl_subjects, dynamic_loading=False, ecg_subset="mimic-iv-ecg_complete_300x300_narrow_images")
-    validating_dataloader = ecg_dl_vl.get_dataloader()
+    #Instantiate model components 
+    text_encoder = TextEncoder(pretrained_model="michiyasunaga/BioLinkBERT-base")
+    report_decoder = ReportDecoder(decoder_name = 'biogpt')
+    rd_emb_dim = report_decoder.decoder_input_dimension
+    ecg_encoder = ECGEncoder(model_architecture="ResNet101", representation_embedding_dim=rd_emb_dim, pretrained_model="resnetPTBXL_weights.pth")
+    te_emb_dim = text_encoder.embedding_dim
+    shared_metric_space = SharedMetricSpace(ecg_embedding_dim=ecg_encoder.representation_embedding_dim, text_embedding_dim=text_encoder.embedding_dim, shared_metric_embedding_dim=text_encoder.embedding_dim)
+    contrastive_learning = ContrastiveLearning()
 
-    tfw = TrainingFramework(ecg_encoder, text_encoder, shared_embedding_space, contrastive_learning, report_decoder)
+    tfw = TrainingFramework(ecg_encoder, text_encoder, shared_metric_space, contrastive_learning, report_decoder, TRAINING_PARAMS)
 
-    tfw.train(training_dataloader, validating_dataloader)
+    #tfw.load_checkpoint("results_big_epoch1\\best_model.pth")
+
+    tfw.train(tr_dl, vl_dl)
 
 
 

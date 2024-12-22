@@ -1,0 +1,2 @@
+,epoch,avg_contrastive_loss,avg_captioning_loss,avg_total_loss,avg_text_captioning_loss,avg_ecg_captioning_loss,avg_text_bleu_score,avg_ecg_bleu_score
+0,0,2.047268745933544,,8.720129311129936,3.2479550961837163,3.424905462234286,0.005191733279953733,0.005815930028209583
