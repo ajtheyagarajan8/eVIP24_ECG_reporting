@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore")
 #KEY ISSUES
 # > CoCa produces sequence-aware embeddings and decodes this to text. We are attempting to decode a single (CLS) embedding, which is very ineffective
 
+#TODO: actually use this
 RANDOM_SEED = 42
 
 TRAINING_PARAMS = {
@@ -51,7 +52,7 @@ if __name__ == "__main__":
 
     tfw = TrainingFramework(ecg_encoder, text_encoder, shared_metric_space, contrastive_learning, report_decoder, TRAINING_PARAMS)
 
-    #tfw.load_checkpoint("results_big_epoch1\\best_model.pth")
+    #tfw.load_checkpoint("best_model.pth")
 
     tfw.train(tr_dl, vl_dl)
 

@@ -385,6 +385,7 @@ class TrainingFramework:
         Args:
             file_path (str): Path to the model checkpoint file.
         """
+        print(f"Loading checkpoint from {file_path}")
         checkpoint = torch.load(file_path)
         self.ecg_encoder.load_state_dict(checkpoint['ecg_encoder_state_dict'])
         self.text_encoder.load_state_dict(checkpoint['text_encoder_state_dict'])

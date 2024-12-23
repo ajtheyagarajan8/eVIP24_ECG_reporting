@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ECGModels.ConvTransformer1D import CTN
 from torchvision import models
-
+from pathlib import Path
 class ECGEncoder(nn.Module):
     """
     ECGEncoder class for encoding ECG waveforms into a shared embedding space.
@@ -49,6 +49,7 @@ class ECGEncoder(nn.Module):
             raise ValueError(f"Unsupported model architecture: {self.model_architecture}")
             self.encoder = CTN(d_model=256, dropout_rate=0.2,deepfeat_sz=64, classes=None)
         elif self.model_architecture == "ConvNext1D":
+            raise ValueError(f"Unsupported model architecture: {self.model_architecture}")
             self.encoder = nn.Sequential(
                 nn.Conv1d(in_channels=12, out_channels=64, kernel_size=7, stride=2, padding=3),
                 nn.ReLU(),
@@ -69,13 +70,18 @@ class ECGEncoder(nn.Module):
             
             # Load the pre-trained weights, skipping the last layer
             if self.pretrained_model != "":
-                model_dict = ResNet101.state_dict()
-                pretrained_dict = torch.load('resnetPTBXL_weights.pth')
-                # Filter out the final fc layer weights
-                pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and 'fc' not in k}
-                # Update the model's state dict with the filtered weights
-                model_dict.update(pretrained_dict)
-                ResNet101.load_state_dict(model_dict)
+                weight_file = Path(self.pretrained_model)
+                if weight_file.is_file():
+                    model_dict = ResNet101.state_dict()
+                    pretrained_dict = torch.load(self.pretrained_model)
+                    # Filter out the final fc layer weights
+                    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and 'fc' not in k}
+                    # Update the model's state dict with the filtered weights
+                    model_dict.update(pretrained_dict)
+                    ResNet101.load_state_dict(model_dict)
+                else:
+                    print(f"Pre-trained weights file '{weight_file}' not found. Training from scratch.")
+
             self.encoder = ResNet101
         else:
             raise ValueError(f"Unsupported model architecture: {self.model_architecture}")
