@@ -45,24 +45,6 @@ import threading
 #For report generation we used ECGDataLoader2.pregen_reports_threading, version saved on this computer
 #For image generation we used ___, version saved on smaller dell
 
-'''
-Some info about the file system structure:
-    > MIMIC-IV-data is the root directory for all the MIMIC-IV data we will use
-    >> /mimic-iv-2.2 contains hosp and icu modules which provide diagnostic/demographic EMR for generating synthetic reports
-    >> /mimic-iv-ed-2.2 contains ed modules which also provide diagnostic/demographic EMR for generating synthetic reports
-    >> /mimic-iv-ecg-matched-subset contains ECG data
-    >>> /mimic-iv-ecg_complete this contains the ECG DICOM files for all studies in the original 'MIMIC-IV-ECG: Diagnostic Electrocardiogram Matched Subset' from physionet
-    >>>> /missing_studies.txt wget sometimes failed to download some files, I will redownload these a month after soon. For now we use these files to filter out studies with missing DICOM files 
-    >>> /mimic-iv-ecg_complete{subset name}
-    >>>> /missing_studies.txt
-    >>>> /record_list.csv is the list of all records (studies) that should be present in this ecg subset (including the missing studies), it tells us the relative path for each study, __getitem__ consults the record list in order to track down the ECG and text report
-    >>>> /all_reports.csv contains all of the pre-generated synthetic free-text reports, this will only exists if we ran __ for this subset
-    >>> /meta_files contain machine_measurements.csv and record_list.csv
-    >>>> machine_measurements.csv from original dataset
-    >>>> record_list.csv this is the record list for mimic-iv-ecg_complete (the original dataset containing all studies), 
-    >>>> 
-
-'''
 
 """
 Python data loader that retrieves waveform files downloaded from
