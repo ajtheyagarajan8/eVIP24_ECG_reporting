@@ -1,21 +1,17 @@
 import os
-import gc
 from pathlib import Path
 import wfdb
 #import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pandas as pd
-import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
-import io
 from sklearn.model_selection import train_test_split
 import random
 import ecg_plot
 import numpy as np
-from scipy.signal import decimate
 from tqdm import tqdm
 import traceback
 from io import BytesIO

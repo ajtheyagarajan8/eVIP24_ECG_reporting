@@ -3,6 +3,13 @@ This repository is an implementation of an LLM and contrastive learning approach
 * [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/)
 * [MIMIC-IV-ECG](https://physionet.org/content/mimic-iv-ecg/1.0/)
 
+## Environment Setup
+
+`conda env create -f environment.yml`
+
+`pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 --index-url https://download.pytorch.org/whl/cu121`
+
+
 ## Quick Start
 
 Make sure `MIMIC_IV_DIR = MIMIC_IV_DIR_MINI_SUBSET` in `ECGDataloader.py`. Run cells in `ECGReporting.ipynb` to train a model using the `MIMIC-IV-data-mini-subset` from this repository.
