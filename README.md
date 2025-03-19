@@ -12,9 +12,13 @@ This repository is an implementation of an LLM and contrastive learning approach
 2. The required pytorch versions have a known bug in the foreign function interface (ffi) dynamic link libraries. To debug this you need to copy files `ffi.dll`, `ffi-7.dll`, and `ffi-8.dll` from `<Your Anaconda Path>/Library/bin` to `<Your Anaconda Path>/envs/ecg_reporting/Library/bin`.
 
 3. Use pip to install pytorch packages:
+    
     Option 1: if you have a GPU from NVIDIA (e.g., RTX, GTX, A-series, Tesla) and CUDA installed on your system
+    
       `pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 --index-url https://download.pytorch.org/whl/cu121`
+    
     Option 2: if you have no dedicate GPU or only an Intel/AMD integrated GPU
+    
       `pip install torch==2.1.2+cpu torchvision==0.16.2+cpu --index-url https://download.pytorch.org/whl/cpu`
 
 
