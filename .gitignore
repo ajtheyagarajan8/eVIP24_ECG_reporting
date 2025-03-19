@@ -1,6 +1,8 @@
 # all data in the complete MIMIC-IV dataset
 MIMIC-IV-data/
 
+environment_full.yml
+
 *.gz
 #PyTorch models
 *.pth
