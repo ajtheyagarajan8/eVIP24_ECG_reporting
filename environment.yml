@@ -3,19 +3,19 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10.13=he1021f5_0
+  - python=3.10.13
   - pandas=2.2.1
-  - pip=23.3.1=py310haa95532_0
-  - jupyter=1.0.0=py310haa95532_9
+  - pip=23.3.1
+  - jupyter=1.0.0
   - nltk=3.9.1
   - matplotlib=3.10.0
-  - matplotlib-base=3.10.0=py310he19b0ae_0
-  - matplotlib-inline=0.1.6=py310haa95532_0
+  - matplotlib-base=3.10.0
+  - matplotlib-inline=0.1.6
   - wfdb=4.1.2
   - pillow=10.2.0
   - scikit-learn=1.4.2
-  - numpy=1.26.4=py310h055cbcc_0
-  - numpy-base=1.26.4=py310h65a83cf_0
+  - numpy=1.26.4
+  - numpy-base=1.26.4
   - tqdm=4.65.2
   - transformers=4.32.1
       
