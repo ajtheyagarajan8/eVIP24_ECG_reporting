@@ -77,6 +77,23 @@ DEFAULT_ECG_CONFIG = {
     "ecg_sampling_rate": 500 #2500
 }
 
+def to_native_path(path_str: str) -> Path:
+    """
+    Convert any path-like string (with '\' or '/' separators, drive letters, UNC prefixes, etc.)
+    into a native pathlib.Path on this OS.
+    """
+    # 1) Normalize redundant separators and up-level refs
+    normalized = os.path.normpath(path_str)
+    # 2) On non-Windows, normpath won't swap '\'→'/', so force every slash to os.sep
+    normalized = normalized.replace('\\', os.sep).replace('/', os.sep)
+    # 3) Build a Path object
+    return Path(normalized)
+
+def path_to_backslash(path: Path) -> str:
+    p = Path(path)                    
+    return str(p).replace('/', '\\')
+
+
 class ECGDataBase:
     #TODO: improve docummentation for this class
     """
@@ -173,17 +190,16 @@ class ECGDataBase:
                 self.ecg_meta_path / "record_list.csv",
                 na_filter=False,
             )
+        self.record_list['path'] = self.record_list['path'].map(to_native_path)
         #remove any missing studies from the record
         missing_studies_file = self.ecg_path / "missing_studies.txt"
         if missing_studies_file.exists():
             print("Detected missing_studies.txt file, now filtering out missing studies")
             with open(missing_studies_file, 'r') as f:
-                file_paths_set = set(line.strip() for line in f)
+                file_paths_set = set(to_native_path(line.strip()) for line in f)
             self.record_list = self.record_list[~self.record_list['path'].isin(file_paths_set)].reset_index(drop=True)
         #filter machine_reports to match record_list
         self.machine_reports = self.machine_reports[self.machine_reports['study_id'].isin(self.record_list['study_id'])].reset_index(drop=True)
-        
-        self.record_list['path'] = self.record_list['path'].apply(Path)
     
     def load_emr(self):
         """
@@ -215,6 +231,7 @@ class ECGDataBase:
     def get_standard_ecg_image(self, file_path):
         """
         The slow way to convert a DICOM formatted ECG study into a standardized ECG image representation.
+        Not used anymore, also will only work on Windows
         """
         #load ECG signal as a numpy array
         signal = self.get_ecg_signal(file_path)
@@ -247,7 +264,7 @@ class ECGDataBase:
         
         return squared_image
 
-    def get_standard_ecg_image_fast(self, file_path):
+    def get_standard_ecg_image_fast(self, file_path: Path):
         """
         The fast way to convert a DICOM formatted ECG study into a standardized ECG image representation.
         """
@@ -263,7 +280,7 @@ class ECGDataBase:
         ecg_image = image.resize(self.ecg_image_dimensions)
         return ecg_image
 
-    def get_ecg_signal(self, file_path):
+    def get_ecg_signal(self, file_path: Path):
         """
         Load DICOM ECG study to numpy array
         """
@@ -451,7 +468,8 @@ class ECGDataBase:
 
         self.record_list['path'].apply(copy_data)
 
-        self.machine_reports.to_csv(mini_ecg_meta_path/"machine_measurements.csv", index=False)          
+        self.machine_reports.to_csv(mini_ecg_meta_path/"machine_measurements.csv", index=False)
+        self.record_list['path'] = self.record_list['path'].apply(path_to_backslash)          
         self.record_list.to_csv(mini_ecg_meta_path/"record_list.csv", index=False)                   
         
         wlink = pd.read_csv(self.ecg_meta_path / "waveform_note_links.csv", na_filter=False)
@@ -473,20 +491,18 @@ class ECGDataBase:
         diag.to_csv(mini_hosp_path/"diagnoses_icd.csv", index=False)   
 
         reports_df = pd.read_csv(self.mimic_ecg_matched_path / "mimic-iv-ecg_complete_300x300_images_to_p1067" / "all_reports.csv")
-        reports_df['study_path'] = reports_df['study_path'].apply(Path)
+        reports_df['study_path'] = reports_df['study_path'].map(to_native_path)
         reports_df = reports_df[reports_df['study_path'].isin(self.record_list['path'])]
+        reports_df['study_path'] = reports_df['study_path'].map(path_to_backslash)
         reports_df.to_csv(mini_ecg_path / "all_reports.csv", index=False)
       
 class ECGDataPreparation:
     #TODO: improve docummentation for this class
     #TODO: test this class more extensively
     """
-    ECGDataPreparation class is used for preparing the dataset for static loading. It performs to main functions:
+    ECGDataPreparation class is used for preparing the dataset for static loading. It performs two main functions:
         1. generating the synthetic free text reports from the EMR and ECG machine measurements
-        2. converting DICOM representation of ECG data to images (signal arrays currently not supported)
-
-    Attributes:
-        
+        2. converting DICOM representation of ECG data to images (signal arrays currently not supported)        
     """
     def __init__(self, dataset_base: ECGDataBase,
                  ecg_save_dir: str = ""):
@@ -519,7 +535,7 @@ class ECGDataPreparation:
             traceback.print_exc()
             return None
         
-    def save_ecg_image(self, study_path):
+    def save_ecg_image(self, study_path: Path):
         #(previously process_study)
         #used for threading
         if study_path.is_file(): 
@@ -584,7 +600,7 @@ class ECGDataPreparation:
         missing_studies = set()
         with open(self.base.ecg_path / "missing_studies.txt", "r") as f:
             for line in f:
-                missing_studies.add(line.strip())
+                missing_studies.add(to_native_path(line.strip()))
         
         # Define the new subset directory name
         total_groups = len(list(self.base.ecg_waveforms_path.iterdir()))
@@ -601,7 +617,7 @@ class ECGDataPreparation:
                         # Gather all valid studies for this subject
                         studies = [
                             st for st in sb.iterdir()
-                            if st.is_dir() and str(Path(*((st / st.name[1:]).parts[-5:]))) not in missing_studies
+                            if st.is_dir() and Path(*((st / st.name[1:]).parts[-5:])) not in missing_studies
                         ]
                         # Submit all studies for processing in a batch
                         futures = [executor.submit(self.save_ecg_image, st) for st in studies]
@@ -683,7 +699,9 @@ class ECGDataLoader(Dataset):
             self.reports_df = None
         else:
             self.reports_df = pd.read_csv(self.base.ecg_path / "all_reports.csv")
-            self.reports_df['study_id'] = self.reports_df['study_path'].apply(os.path.basename).astype(str)
+            self.reports_df['study_path'] = self.reports_df['study_path'].map(to_native_path)
+            #self.reports_df['study_id'] = self.reports_df['study_path'].apply(os.path.basename).astype(str)
+            self.reports_df['study_id'] = self.reports_df['study_path'].map(lambda p: p.name)
 
     def filter_subject_split(self):
         #only get subjects in current split
@@ -719,7 +737,7 @@ class ECGDataLoader(Dataset):
         }
         return sample
 
-    def get_ecg_image(self, study_path_stem):
+    def get_ecg_image(self, study_path_stem: Path):
         if self.dynamic_loading:
             #load the DICOM to an image
             file_path = self.base.ecg_path / study_path_stem
@@ -783,14 +801,15 @@ def test_dl(dl, nbatches):
         show_ecg_batch(b) 
 
 def test_ecg_data_preparation():
-    edp = ECGDataPreparation(ecg_save_dir="test_prep")
-    edp.basic_undersample_for_testing(100)
-    #edp.pregen_reports_threading()
+    edb = ECGDataBase(ecg_data_dir="mimic-iv-ecg_complete")
+    edb.random_undersample(100)
+    edp = ECGDataPreparation(edb, ecg_save_dir="test_prep")
+    edp.pregen_reports_threading()
     #edp.pregen_reports()
     edp.pregen_ecg_images_threading()
 
 def test_static_loading():
-    edb = ECGDataBase(ecg_data_dir="mimic-iv-ecg_complete_300x300_images_to_p1067")
+    edb = ECGDataBase(ecg_data_dir="test_prep")
     #edb.random_undersample(100)
     tr_subjects, vl_subjects = edb.train_val_split()
     print(f"tr_subjects: {len(tr_subjects)}")

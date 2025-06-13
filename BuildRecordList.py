@@ -1,10 +1,11 @@
 from pathlib import Path
 import pandas as pd
+from ECGDataLoader import to_native_path, path_to_backslash, MIMIC_IV_DIR
 
 class BuildRecordList:
     def __init__(self, subset_root):
         # Initialize file paths and parameters
-        self.mimiciv_root_dir = Path.cwd().joinpath("MIMIC-IV-data")
+        self.mimiciv_root_dir = Path.cwd().joinpath(MIMIC_IV_DIR)
         self.mimic_ecg_matched_path = self.mimiciv_root_dir / "mimic-iv-ecg-matched-subset"
         self.ecg_meta_path = self.mimic_ecg_matched_path / "meta_files"
         self.subset_root = subset_root
@@ -15,6 +16,7 @@ class BuildRecordList:
                 self.ecg_meta_path / "record_list.csv",
                 na_filter=False,
         )
+        self.parent_record_list['path'] = self.parent_record_list['path'].map(to_native_path)
         #have to match these with the files that are in record_list.csv
         self.record_list = pd.DataFrame(columns=["subject_id", "study_id", "file_name", "path"])
         
@@ -26,11 +28,12 @@ class BuildRecordList:
                 if "index.html" in str(subject_path): continue
                 for study_path in subject_path.iterdir():
                     if "index.html" in str(study_path): continue
-                    relative_path_str = str(study_path/study_path.name[1:]).split(self.subset_root)[1].replace('\\', '/')
+                    #TODO: relative_path_str should be Windows path format
+                    relative_path_str = str(study_path/study_path.name[1:]).split(self.subset_root)[1]#.replace('\\', '/')
                     row = {"subject_id": subject_path.name[1:], "study_id": study_path.name[1:], "file_name": study_path.name[1:], "path": relative_path_str[1:]}
                     self.record_list = pd.concat([self.record_list, pd.DataFrame([row])], ignore_index=True)
         matched_subset = self.record_list.merge(self.parent_record_list[['path', 'ecg_time']], on='path', how='left')
-
+        matched_subset['path'] = matched_subset['path'].map(path_to_backslash)
         matched_subset.to_csv(self.ecg_path/"record_list.csv", index=False)          
 
 if __name__ == "__main__":
