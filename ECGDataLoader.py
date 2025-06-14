@@ -469,8 +469,7 @@ class ECGDataBase:
         self.record_list['path'].apply(copy_data)
 
         self.machine_reports.to_csv(mini_ecg_meta_path/"machine_measurements.csv", index=False)
-        self.record_list['path'] = self.record_list['path'].apply(path_to_backslash)          
-        self.record_list.to_csv(mini_ecg_meta_path/"record_list.csv", index=False)                   
+               
         
         wlink = pd.read_csv(self.ecg_meta_path / "waveform_note_links.csv", na_filter=False)
         wlink = wlink[wlink['study_id'].isin(self.record_list['study_id'])]
@@ -495,6 +494,9 @@ class ECGDataBase:
         reports_df = reports_df[reports_df['study_path'].isin(self.record_list['path'])]
         reports_df['study_path'] = reports_df['study_path'].map(path_to_backslash)
         reports_df.to_csv(mini_ecg_path / "all_reports.csv", index=False)
+
+        self.record_list['path'] = self.record_list['path'].apply(path_to_backslash)          
+        self.record_list.to_csv(mini_ecg_meta_path/"record_list.csv", index=False)            
       
 class ECGDataPreparation:
     #TODO: improve docummentation for this class
