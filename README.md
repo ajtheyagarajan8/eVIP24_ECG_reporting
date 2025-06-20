@@ -31,6 +31,8 @@ The MIMIC-IV datasets used in this project are >100 Gb and contain >3 million fi
 
 This repository contains a synthetic subset of MIMIC-IV in `MIMIC-IV-data-mini-subset` which is only 65Mb and contains only 600 records. This can be used for testing and learning the code. The file structure in `MIMIC-IV-data-mini-subset` mostly resembles the file structure for the full dataset `MIMIC-IV-data`. 
 
+You may specify for `ECGEncoder` to use a ResNet101 pre-trained on ECG classification with the `pretrained_model` argument. Weights for this pre-trained model can be downloaded from [here](https://unsw-my.sharepoint.com/:f:/g/personal/z5162987_ad_unsw_edu_au/EmWOvKB1L_dArtipRv2Aw30Bwgomq4pvq6fT5b5nAzpNyQ?e=KEV1Ya), the filename is 'resnetPTBXL_weights.pth'.
+
 ### MIMIC-IV File Structure
 - MIMIC-IV-data-mini-subset/
   - mimic-iv-2.2/
