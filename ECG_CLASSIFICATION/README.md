@@ -18,4 +18,6 @@ The scripts used for processing raw PTB-XL from to images has not been released 
 
 Run the cells in `pytorch_approach.ipynb` to train a ResNet101 model to perform image-based multi-label classification on 6 classes: ['atrial fibrillation','left bundle branch block','1st degree av block','premature atrial contraction','sinus rhythm','complete right bundle branch block'].
 
+Model weights for a 2-epoch training run can be found [here](https://unsw-my.sharepoint.com/:f:/g/personal/z5162987_ad_unsw_edu_au/EmWOvKB1L_dArtipRv2Aw30Bwgomq4pvq6fT5b5nAzpNyQ?e=KEV1Ya), the filename is 'resnetPTBXL_weights.pth'.
+
 The final cell is a starting point for future work in implementing a ViT for ECG classification.
