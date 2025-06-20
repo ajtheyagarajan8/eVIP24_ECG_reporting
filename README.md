@@ -26,12 +26,12 @@ This repository is an implementation of an LLM and contrastive learning approach
 
 Make sure `MIMIC_IV_DIR = MIMIC_IV_DIR_MINI_SUBSET` in `ECGDataloader.py`. Run cells in `ECGReporting.ipynb` to train a model using the `MIMIC-IV-data-mini-subset` from this repository.
 
+You may specify for `ECGEncoder` to use a ResNet101 pre-trained on ECG classification with the `pretrained_model` argument. Weights for this pre-trained model can be downloaded from [here](https://unsw-my.sharepoint.com/:f:/g/personal/z5162987_ad_unsw_edu_au/EmWOvKB1L_dArtipRv2Aw30Bwgomq4pvq6fT5b5nAzpNyQ?e=KEV1Ya), the filename is 'resnetPTBXL_weights.pth'.
+
 ## MIMIC-IV Datasets
 The MIMIC-IV datasets used in this project are >100 Gb and contain >3 million files. It is available for download once you become a credentialed user on Physionet. Please email [jonathan.williams@student.unsw.edu.au](mailto:jonathan.williams@student.unsw.edu.au) for instructions. Once downloaded please unzip and make sure it is stored in a folder named `MIMIC-IV-data`. 
 
 This repository contains a synthetic subset of MIMIC-IV in `MIMIC-IV-data-mini-subset` which is only 65Mb and contains only 600 records. This can be used for testing and learning the code. The file structure in `MIMIC-IV-data-mini-subset` mostly resembles the file structure for the full dataset `MIMIC-IV-data`. 
-
-You may specify for `ECGEncoder` to use a ResNet101 pre-trained on ECG classification with the `pretrained_model` argument. Weights for this pre-trained model can be downloaded from [here](https://unsw-my.sharepoint.com/:f:/g/personal/z5162987_ad_unsw_edu_au/EmWOvKB1L_dArtipRv2Aw30Bwgomq4pvq6fT5b5nAzpNyQ?e=KEV1Ya), the filename is 'resnetPTBXL_weights.pth'.
 
 ### MIMIC-IV File Structure
 - MIMIC-IV-data-mini-subset/
