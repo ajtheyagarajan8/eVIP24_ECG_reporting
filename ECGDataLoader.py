@@ -97,11 +97,46 @@ def path_to_backslash(path: Path) -> str:
 class ECGDataBase:
     #TODO: improve docummentation for this class
     """
-    ECGDataBase class defines the database for an ECGReporting experiment by compiling a list of records to use. 
-    This class also acts as a helper class for ECGDataLoader and ECGDataPreparation. An instance of this class is passed to any instance of ECGDataLoader and ECGDataPreparation
+
+    This class:
+        - Loads and organises ECG study metadata (record list and machine-generated measurements).
+        - Prepares subject-level splits for training/validation.
+        - Links ECG studies to EMR data (admissions, diagnoses, ICD descriptions).
+        - Provides helper functions to retrieve ECG signals and generate standardised ECG images.
+        - Supports subsetting and exporting mini-datasets for faster experiments.
+
+    It is primarily used as a data container and utility provider by 
+    `ECGDataLoader` and `ECGDataPreparation`. Avoid implementing any method 
+    that directly reads `record_list` or `machine_reports` here, since these 
+    lists are synchronised and filtered downstream.
 
     Attributes:
-        
+        ecg_config (dict): Configuration dictionary controlling ECG sampling 
+            rates, preprocessing (gain/offset), and image size for generated 
+            ECG plots.
+        ecg_data_dir (str): Subset directory containing ECG waveform files and 
+            metadata (e.g., "mimic-iv-ecg_complete").
+        emr_loaded (bool): Flag to indicate if EMR tables (admissions, diagnoses) 
+            are loaded.
+        admissions (pd.DataFrame): Admissions table with admit/discharge times.
+        diagnoses_icd (pd.DataFrame): ICD diagnoses per admission.
+        d_icd_diagnoses (pd.DataFrame): ICD code descriptions.
+        record_list (pd.DataFrame): List of available ECG records in the dataset.
+        machine_reports (pd.DataFrame): Machine-generated ECG summary measurements 
+            aligned to the record list.
+        all_subject_ids (np.ndarray): Array of unique subject IDs across records.
+
+    Usage:
+        >>> db = ECGDataBase()
+        >>> db.load_emr()
+        >>> train_ids, val_ids = db.train_val_split()
+        >>> image = db.get_standard_ecg_image_fast(Path("study123.dat"))
+
+    Notes:
+        - Paths and metadata initialization occurs at instantiation.
+        - Uses `wfdb` to load ECG waveforms.
+        - Supports exporting filtered mini-subsets via `save_mini_subset()`.
+        - Requires external constants like `MIMIC_IV_DIR`, `MIMIC_IV_ECG_DIR`, etc.
     """
     #WARNING: avoid implementing any methods in ECGDataBase which rely on reading data from self.record_list or self.machine_reports because this will not be synchronized with instances of ECGDataLoader
     def __init__(self, ecg_config: dict = DEFAULT_ECG_CONFIG,
@@ -173,6 +208,7 @@ class ECGDataBase:
             na_filter=False,
             parse_dates=["ecg_time"]
         )
+
         #load record_list.csv
         if self.ecg_data_dir != "mimic-iv-ecg_complete":
             #for ecg_data_dir subsets other than "mimic-iv-ecg_complete" we have to make our own record_list.csv
