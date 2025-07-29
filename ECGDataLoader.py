@@ -95,8 +95,8 @@ def path_to_backslash(path: Path) -> str:
 
 
 class ECGDataBase:
-    """
 
+    """
     This class:
         - Loads and organises ECG study metadata (record list and machine-generated measurements).
         - Prepares subject-level splits for training/validation.
@@ -561,10 +561,58 @@ class ECGDataBase:
 class ECGDataPreparation:
     #TODO: improve docummentation for this class
     #TODO: test this class more extensively
+
     """
-    ECGDataPreparation class is used for preparing the dataset for static loading. It performs two main functions:
-        1. generating the synthetic free text reports from the EMR and ECG machine measurements
-        2. converting DICOM representation of ECG data to images (signal arrays currently not supported)        
+    The ECGDataPreparation class is used for preparing the dataset for static loading. It performs two main functions:
+        1. Generating the synthetic free text reports from the EMR and ECG machine measurements
+        2. Converting DICOM representation of ECG data to PNG images (signal arrays currently not supported)
+
+    Essentially, it handles pre-processing of ECG datasets for machine learning tasks.
+    
+    This class builds on top of `ECGDataBase` to:
+        1. Generate synthetic free-text reports for each ECG study by combining:
+            - Machine-generated ECG summary measurements,
+            - Machine-generated free-text reports,
+            - Hospital EMR data (admissions and diagnoses).
+           The compiled reports are stored as a CSV (`all_reports.csv`) for use
+           in NLP or multimodal ML models.
+        
+        2. Convert raw DICOM-format ECG waveform studies into standardised
+           PNG images using the `ECGDataBase.get_standard_ecg_image_fast` method.
+           These images are saved to a designated output directory, preserving the
+           study directory structure.
+
+    Features:
+        - Supports both single-threaded and multi-threaded processing
+          for report generation.
+        - Uses multiprocessing for ECG image conversion for speed.
+        - Can save intermediate results periodically (every N reports).
+
+    Attributes:
+        base (ECGDataBase): The loaded ECG dataset, including record list,
+            machine measurements, and EMR tables.
+        ecg_save_dir (str): Directory name for saving generated files (defaults
+            to a timestamped folder if not provided).
+        ecg_save_path (Path): Absolute path to the output directory.
+        reports_save_interval (int): Frequency (in records) for intermediate
+            saving of generated reports.
+
+    Output Files:
+        - `all_reports.csv`: Contains synthetic reports with columns:
+            ["study_path", "report"].
+        - PNG files for each ECG study (mirroring input directory structure).
+
+    Usage:
+        >>> db = ECGDataBase()
+        >>> prep = ECGDataPreparation(db)
+        >>> prep.pregen_reports_threading()  # Generate text reports
+        >>> prep.pregen_ecg_images_threading()  # Generate ECG images
+
+    Notes:
+        - Assumes all necessary CSVs (machine_measurements, admissions, etc.)
+          are available in `db`.
+        - The generated images and reports can be used for ML pipelines without
+          requiring raw DICOM files.
     """
     def __init__(self, dataset_base: ECGDataBase,
                  ecg_save_dir: str = ""):
