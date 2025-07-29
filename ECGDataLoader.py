@@ -138,6 +138,18 @@ class ECGDataBase:
         - Supports exporting filtered mini-subsets via `save_mini_subset()`.
         - Requires external constants like `MIMIC_IV_DIR`, `MIMIC_IV_ECG_DIR`, etc.
     """
+
+    # Files used by class methods throughout
+    MACHINE_MEASUREMENTS_CSV = "machine_measurements.csv"
+    WAVEFORM_NOTE_LINKS_CSV = "waveform_note_links.csv"
+    ADMISSIONS_CSV = "admissions.csv"
+    DIAGNOSES_ICD_CSV = "diagnoses_icd.csv"
+    D_ICD_DIAGNOSES_CSV = "d_icd_diagnoses.csv"
+    ALL_REPORTS_CSV = "all_reports.csv"
+    RECORD_LIST_CSV = "record_list.csv"
+
+    MISSING_STUDIES_TXT = "missing_studies.txt"
+
     #WARNING: avoid implementing any methods in ECGDataBase which rely on reading data from self.record_list or self.machine_reports because this will not be synchronized with instances of ECGDataLoader
     def __init__(self, ecg_config: dict = DEFAULT_ECG_CONFIG,
                  ecg_data_dir: str = MIMIC_IV_ECG_DATA_SRC_DIR):
@@ -203,32 +215,35 @@ class ECGDataBase:
         Compile list of all mimic-iv-ecg-matched-subset records and store as a dataframe in self.record_list. 
         Load the machine_measurements.csv and align it with record_list
         """
+    
         self.machine_reports = pd.read_csv(
-            self.ecg_meta_path / "machine_measurements.csv",
+            self.ecg_meta_path / self.MACHINE_MEASUREMENTS_CSV,
             na_filter=False,
             parse_dates=["ecg_time"]
         )
 
+
         #load record_list.csv
         if self.ecg_data_dir != "mimic-iv-ecg_complete":
             #for ecg_data_dir subsets other than "mimic-iv-ecg_complete" we have to make our own record_list.csv
-            if (self.ecg_path / "record_list.csv").exists():
-                self.record_list = pd.read_csv(self.ecg_path / "record_list.csv",na_filter=False)
+            if (self.ecg_path / self.RECORD_LIST_CSV).exists():
+                self.record_list = pd.read_csv(self.ecg_path / self.RECORD_LIST_CSV,na_filter=False)
             else: #if you don't have a record list for your ecg_data_dir subset bob will build one:
                 print(f"Building record list because {self.ecg_path} hasn't got one")
                 from BuildRecordList import BuildRecordList
                 bob = BuildRecordList(self.ecg_data_dir)
                 bob.build()
-                self.record_list = pd.read_csv(self.ecg_path / "record_list.csv",na_filter=False)
+                self.record_list = pd.read_csv(self.ecg_path / self.RECORD_LIST_CSV,na_filter=False)
                 print(f"Finished building records list")
         else: #there doesn't need to be a record_list stored in 'mimic-iv-ecg_complete' since we just use the official full record list in 'meta_files'
             self.record_list = pd.read_csv(
-                self.ecg_meta_path / "record_list.csv",
+                self.ecg_meta_path / self.RECORD_LIST_CSV,
                 na_filter=False,
             )
         self.record_list['path'] = self.record_list['path'].map(to_native_path)
         #remove any missing studies from the record
-        missing_studies_file = self.ecg_path / "missing_studies.txt"
+
+        missing_studies_file = self.ecg_path / self.MISSING_STUDIES_TXT
         if missing_studies_file.exists():
             print("Detected missing_studies.txt file, now filtering out missing studies")
             with open(missing_studies_file, 'r') as f:
@@ -246,8 +261,9 @@ class ECGDataBase:
             return
         else:
             print("Loading EMR: admissions.csv, diagnoses_icd.csv, d_icd_diagnoses.csv")
+
         self.admissions = pd.read_csv(
-                self.hosp_path / "admissions.csv",
+                self.hosp_path / self.ADMISSIONS_CSV,
                 usecols=[
                     "subject_id", "hadm_id", "admittime",
                     "dischtime", "edregtime", "edouttime"
@@ -255,11 +271,11 @@ class ECGDataBase:
                 parse_dates=["admittime", "dischtime", "edregtime", "edouttime"]
             )
         self.diagnoses_icd = pd.read_csv(
-                self.hosp_path / "diagnoses_icd.csv",
+                self.hosp_path / self.DIAGNOSES_ICD_CSV,
                 usecols=["subject_id", "hadm_id", "icd_code"]
             )
         self.d_icd_diagnoses = pd.read_csv(
-                self.hosp_path / "d_icd_diagnoses.csv",
+                self.hosp_path / self.D_ICD_DIAGNOSES_CSV,
                 usecols=["icd_code", "long_title"]
             )
         self.emr_loaded = True
@@ -504,16 +520,23 @@ class ECGDataBase:
 
         self.record_list['path'].apply(copy_data)
 
-        self.machine_reports.to_csv(mini_ecg_meta_path/"machine_measurements.csv", index=False)
+        self.machine_reports.to_csv(mini_ecg_meta_path/self.MACHINE_MEASUREMENTS_CSV, index=False)
                
         
-        wlink = pd.read_csv(self.ecg_meta_path / "waveform_note_links.csv", na_filter=False)
+        #define filenames to eliminate hardcoding
+        #waveform_note_links_csv = "waveform_note_links.csv"
+        #admissions_csv = "admissions.csv"
+
+        # Filtering and saving waveform studies after linked to ECG studies via study_id
+        wlink = pd.read_csv(self.ecg_meta_path / self.WAVEFORM_NOTE_LINKS_CSV, na_filter=False)
         wlink = wlink[wlink['study_id'].isin(self.record_list['study_id'])]
-        wlink.to_csv(mini_ecg_meta_path/"waveform_note_links.csv", index=False)          
+        wlink.to_csv(mini_ecg_meta_path/self.WAVEFORM_NOTE_LINKS_CSV, index=False)  
+
+        # Filtering and saving hospital admission data after linked to ECG studies via study_id      
         
-        admi = pd.read_csv(self.hosp_path / "admissions.csv", na_filter=False)
+        admi = pd.read_csv(self.hosp_path / self.ADMISSIONS_CSV, na_filter=False)
         admi = admi[admi['subject_id'].isin(self.record_list['subject_id'])]
-        admi.to_csv(mini_hosp_path/"admissions.csv", index=False)          
+        admi.to_csv(mini_hosp_path/self.ADMISSIONS_CSV, index=False)          
         
         #just copy the whole original file because it is not that big
         #dicd = pd.read_csv(self.hosp_path / "d_icd_diagnoses.csv", na_filter=False)
@@ -521,18 +544,19 @@ class ECGDataBase:
         #dicd.to_csv(mini_hosp_path/"d_icd_diagnoses.csv", index=False)          
         
         #this file is slightly too big, so filter out by subject id
-        diag = pd.read_csv(self.hosp_path / "diagnoses_icd.csv", na_filter=False)
+
+        diag = pd.read_csv(self.hosp_path / self.DIAGNOSES_ICD_CSV, na_filter=False)
         diag = diag[diag['subject_id'].isin(self.record_list['subject_id'])]
-        diag.to_csv(mini_hosp_path/"diagnoses_icd.csv", index=False)   
+        diag.to_csv(mini_hosp_path/self.DIAGNOSES_ICD_CSV, index=False)   
 
         reports_df = pd.read_csv(self.mimic_ecg_matched_path / "mimic-iv-ecg_complete_300x300_images_to_p1067" / "all_reports.csv")
         reports_df['study_path'] = reports_df['study_path'].map(to_native_path)
         reports_df = reports_df[reports_df['study_path'].isin(self.record_list['path'])]
         reports_df['study_path'] = reports_df['study_path'].map(path_to_backslash)
-        reports_df.to_csv(mini_ecg_path / "all_reports.csv", index=False)
+        reports_df.to_csv(mini_ecg_path /self.ALL_REPORTS_CSV, index=False)
 
         self.record_list['path'] = self.record_list['path'].apply(path_to_backslash)          
-        self.record_list.to_csv(mini_ecg_meta_path/"record_list.csv", index=False)            
+        self.record_list.to_csv(mini_ecg_meta_path/self.RECORD_LIST_CSV, index=False)            
       
 class ECGDataPreparation:
     #TODO: improve docummentation for this class
