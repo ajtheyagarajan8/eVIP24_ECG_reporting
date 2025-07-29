@@ -95,7 +95,6 @@ def path_to_backslash(path: Path) -> str:
 
 
 class ECGDataBase:
-    #TODO: improve docummentation for this class
     """
 
     This class:
@@ -163,12 +162,12 @@ class ECGDataBase:
         print("Instansiating ECGDataBase")
         
         self.init_paths()
-        print("Paths initialized")
+        print("Paths initialised")
 
         self.base_sanity_check()
         print("ECGDataBase sanity check passed")
 
-        self.unpack_ecg_config()
+        self.unpack_ecg_config()                        
         print("ECG config unpacked")
 
         self.compile_record_list()
