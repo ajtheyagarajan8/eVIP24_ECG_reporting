@@ -559,7 +559,6 @@ class ECGDataBase:
         self.record_list.to_csv(mini_ecg_meta_path/self.RECORD_LIST_CSV, index=False)            
       
 class ECGDataPreparation:
-    #TODO: improve docummentation for this class
     #TODO: test this class more extensively
 
     """
